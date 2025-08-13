@@ -6,6 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dreams POS System{% endblock %}</title>
     
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Dreams POS System - A fast, reliable, and user-friendly point of sale solution to manage your business effectively.">
+    <meta name="keywords" content="POS, point of sale, business management, inventory, sales, Dreams POS System">
+    <meta name="author" content="Dreams POS Team">
+    
+    <!-- Open Graph (Facebook, LinkedIn) -->
+    <meta property="og:title" content="Dreams POS System">
+    <meta property="og:description" content="A fast, reliable, and user-friendly POS system to streamline your business.">
+    <meta property="og:image" content="{% static 'images/og-image.jpg' %}">
+    <meta property="og:url" content="https://www.example.com">
+    <meta property="og:type" content="website">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Dreams POS System">
+    <meta name="twitter:description" content="Manage sales, inventory, and customers with ease using Dreams POS System.">
+    <meta name="twitter:image" content="{% static 'img/logo.png' %}">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'img/logo.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'img/logo.png' %}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'img/logo.png' %}">
+    <link rel="manifest" href="{% static 'site.webmanifest' %}">
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome Icons -->
@@ -15,6 +39,7 @@
     
     {% block extra_css %}{% endblock %}
 </head>
+
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
