@@ -1,0 +1,390 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Sale Details - {{ sale.sale_number }} - Dreams POS{% endblock %}
+
+{% block search_bar %}
+<div class="input-group">
+    <input type="text" class="form-control search-bar" placeholder="Search sales..." disabled>
+    <button class="btn btn-outline-secondary" type="button" disabled>
+        <i class="fas fa-search"></i>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Header Section -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-2">
+                        <li class="breadcrumb-item"><a href="{% url 'sales_history' %}">Sales History</a></li>
+                        <li class="breadcrumb-item active">{{ sale.sale_number }}</li>
+                    </ol>
+                </nav>
+                <h4 class="fw-bold mb-1">Sale Details</h4>
+                <p class="text-muted mb-0">Complete information for sale {{ sale.sale_number }}</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" onclick="window.history.back()">
+                    <i class="fas fa-arrow-left me-2"></i>Back
+                </button>
+                <button class="btn btn-outline-primary" onclick="printReceipt()">
+                    <i class="fas fa-print me-2"></i>Print Receipt
+                </button>
+                {% if sale.customer and sale.customer.email %}
+                <button class="btn btn-outline-info" onclick="emailReceipt()">
+                    <i class="fas fa-envelope me-2"></i>Email Receipt
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Sale Information -->
+            <div class="col-lg-8">
+                <!-- Sale Overview -->
+                <div class="bg-white rounded-3 p-4 shadow-sm mb-4">
+                    <h6 class="fw-bold mb-3">Sale Information</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Sale Number</label>
+                                <div class="fw-semibold">{{ sale.sale_number }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Date & Time</label>
+                                <div class="fw-semibold">{{ sale.created_at|date:"F d, Y g:i A" }}</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Cashier</label>
+                                <div class="fw-semibold">{{ sale.cashier.get_full_name|default:sale.cashier.username }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Payment Method</label>
+                                <div>
+                                    <span class="badge 
+                                        {% if sale.payment_method == 'cash' %}bg-success
+                                        {% elif sale.payment_method == 'card' %}bg-primary
+                                        {% elif sale.payment_method == 'mobile' %}bg-info
+                                        {% else %}bg-warning{% endif %} fs-6">
+                                        {{ sale.get_payment_method_display }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Amount Paid</label>
+                                <div class="fw-semibold">KES {{ sale.amount_paid }}</div>
+                            </div>
+                            {% if sale.change_given > 0 %}
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Change Given</label>
+                                <div class="fw-semibold text-success">KES {{ sale.change_given }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Customer Information -->
+                {% if sale.customer %}
+                <div class="bg-white rounded-3 p-4 shadow-sm mb-4">
+                    <h6 class="fw-bold mb-3">Customer Information</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Name</label>
+                                <div class="fw-semibold">{{ sale.customer.name }}</div>
+                            </div>
+                            {% if sale.customer.email %}
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Email</label>
+                                <div class="fw-semibold">{{ sale.customer.email }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Loyalty Tier</label>
+                                <div>
+                                    <span class="badge bg-{% if sale.customer.loyalty_tier == 'bronze' %}warning{% elif sale.customer.loyalty_tier == 'silver' %}secondary{% elif sale.customer.loyalty_tier == 'gold' %}warning{% else %}dark{% endif %} fs-6">
+                                        {{ sale.customer.get_loyalty_tier_display }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted">Loyalty Points</label>
+                                <div class="fw-semibold">{{ sale.customer.loyalty_points }} points</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Sale Items -->
+                <div class="bg-white rounded-3 shadow-sm">
+                    <div class="p-4 border-bottom">
+                        <h6 class="fw-bold mb-0">Items Purchased</h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Product</th>
+                                    <th>SKU</th>
+                                    <th>Category</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in sale_items %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            {% if item.product.image %}
+                                                <img src="{{ item.product.image.url }}" alt="{{ item.product.name }}" 
+                                                     class="rounded me-3" style="width: 40px; height: 40px; object-fit: cover;">
+                                            {% else %}
+                                                <div class="bg-light rounded me-3 d-flex align-items-center justify-content-center" 
+                                                     style="width: 40px; height: 40px;">
+                                                    <i class="fas fa-image text-muted"></i>
+                                                </div>
+                                            {% endif %}
+                                            <div>
+                                                <div class="fw-semibold">{{ item.product.name }}</div>
+                                                {% if item.product.description %}
+                                                    <small class="text-muted">{{ item.product.description|truncatechars:50 }}</small>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark">{{ item.product.sku }}</span>
+                                    </td>
+                                    <td>{{ item.product.category.name }}</td>
+                                    <td>
+                                        <span class="fw-semibold">{{ item.quantity }}</span>
+                                    </td>
+                                    <td>KES {{ item.unit_price }}</td>
+                                    <td>
+                                        <span class="fw-bold text-success">KES {{ item.total_price }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sale Summary -->
+            <div class="col-lg-4">
+                <div class="bg-white rounded-3 p-4 shadow-sm mb-4">
+                    <h6 class="fw-bold mb-3">Sale Summary</h6>
+                    
+                    <!-- Financial Breakdown -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Subtotal:</span>
+                            <span class="fw-semibold">KES {{ sale.total_amount }}</span>
+                        </div>
+                        {% if sale.discount_amount > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Discount:</span>
+                            <span class="fw-semibold text-success">-KES {{ sale.discount_amount }}</span>
+                        </div>
+                        {% endif %}
+                        {% if sale.tax_amount > 0 %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Tax:</span>
+                            <span class="fw-semibold">KES {{ sale.tax_amount }}</span>
+                        </div>
+                        {% endif %}
+                        <hr>
+                        <div class="d-flex justify-content-between mb-3">
+                            <span class="fw-bold fs-5">Total:</span>
+                            <span class="fw-bold fs-5 text-primary">KES {{ sale.final_amount }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Payment Details -->
+                    <div class="bg-light rounded-3 p-3 mb-4">
+                        <h6 class="fw-bold mb-2">Payment Details</h6>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span>Amount Paid:</span>
+                            <span class="fw-semibold">KES {{ sale.amount_paid }}</span>
+                        </div>
+                        {% if sale.change_given > 0 %}
+                        <div class="d-flex justify-content-between">
+                            <span>Change Given:</span>
+                            <span class="fw-semibold text-success">KES {{ sale.change_given }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Quick Stats -->
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="bg-primary bg-opacity-10 rounded-3 p-3 text-center">
+                                <i class="fas fa-shopping-bag text-primary fa-lg mb-2"></i>
+                                <div class="fw-bold">{{ sale_items.count }}</div>
+                                <small class="text-muted">Items</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="bg-success bg-opacity-10 rounded-3 p-3 text-center">
+                                <i class="fas fa-coins text-success fa-lg mb-2"></i>
+                                <div class="fw-bold">{{ sale_items|length }}</div>
+                                <small class="text-muted">Products</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="bg-white rounded-3 p-4 shadow-sm">
+                    <h6 class="fw-bold mb-3">Quick Actions</h6>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary" onclick="printReceipt()">
+                            <i class="fas fa-print me-2"></i>Print Receipt
+                        </button>
+                        {% if sale.customer and sale.customer.email %}
+                        <button class="btn btn-outline-info" onclick="emailReceipt()">
+                            <i class="fas fa-envelope me-2"></i>Email to Customer
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-outline-secondary" onclick="duplicateSale()">
+                            <i class="fas fa-copy me-2"></i>Duplicate Sale
+                        </button>
+                        <hr class="my-2">
+                        <a href="{% url 'sales_history' %}" class="btn btn-outline-primary">
+                            <i class="fas fa-list me-2"></i>Back to Sales History
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Print Receipt Modal -->
+<div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt me-2"></i>Receipt Preview
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="receiptContent">
+                <!-- Receipt content will be generated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="window.print()">
+                    <i class="fas fa-print me-2"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function printReceipt() {
+    const receiptContent = generateReceiptHTML();
+    document.getElementById('receiptContent').innerHTML = receiptContent;
+    new bootstrap.Modal(document.getElementById('receiptModal')).show();
+}
+
+function emailReceipt() {
+    fetch(`#`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Receipt sent successfully!', 'success');
+        } else {
+            showToast('Failed to send receipt', 'danger');
+        }
+    })
+    .catch(error => {
+        showToast('An error occurred', 'danger');
+    });
+}
+
+function duplicateSale() {
+    if (confirm('This will create a new sale with the same items. Continue?')) {
+        // Implement duplicate sale functionality
+        window.location.href = '{% url "terminal" %}?duplicate={{ sale.id }}';
+    }
+}
+
+function generateReceiptHTML() {
+    return `
+        <div class="receipt text-center">
+            <h4 class="fw-bold">Dreams Store</h4>
+            <p class="mb-1">Thank you for your purchase!</p>
+            <hr>
+            <div class="text-start">
+                <p><strong>Sale #:</strong> {{ sale.sale_number }}</p>
+                <p><strong>Date:</strong> {{ sale.created_at|date:"F d, Y g:i A" }}</p>
+                <p><strong>Cashier:</strong> {{ sale.cashier.get_full_name|default:sale.cashier.username }}</p>
+                {% if sale.customer %}
+                <p><strong>Customer:</strong> {{ sale.customer.name }}</p>
+                {% endif %}
+            </div>
+            <hr>
+            <div class="text-start">
+                {% for item in sale_items %}
+                <div class="d-flex justify-content-between">
+                    <span>Discount:</span>
+                    <span>-KES {{ sale.discount_amount }}</span>
+                </div>
+                
+                {% endfor  %}
+                {% if sale.tax_amount > 0 %}
+                <div class="d-flex justify-content-between">
+                    <span>Tax:</span>
+                    <span>KES {{ sale.tax_amount }}</span>
+                </div>
+                {% endif %}
+                <div class="d-flex justify-content-between fw-bold">
+                    <span>Total:</span>
+                    <span>KES {{ sale.final_amount }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Paid:</span>
+                    <span>KES {{ sale.amount_paid }}</span>
+                </div>
+                {% if sale.change_given > 0 %}
+                <div class="d-flex justify-content-between">
+                    <span>Change:</span>
+                    <span>KES {{ sale.change_given }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    `;
+}
+
+// Toast notification function
+function showToast(message, type) {
+    // Implement your toast notification here
+    alert(message); // Temporary implementation
+}
+</script>
+{% endblock %}

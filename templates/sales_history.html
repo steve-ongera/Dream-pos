@@ -1,0 +1,298 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Sales History - Dreams POS{% endblock %}
+
+{% block search_bar %}
+<div class="input-group">
+    <input type="text" class="form-control search-bar" placeholder="Search sales..." id="salesSearch">
+    <button class="btn btn-outline-secondary" type="button" onclick="searchSales()">
+        <i class="fas fa-search"></i>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Header Section -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h4 class="fw-bold mb-1">Sales History</h4>
+                <p class="text-muted mb-0">Track and manage all your sales transactions</p>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary" onclick="exportSales()">
+                    <i class="fas fa-download me-2"></i>Export
+                </button>
+                <button class="btn btn-primary" onclick="printReport()">
+                    <i class="fas fa-print me-2"></i>Print Report
+                </button>
+            </div>
+        </div>
+
+        <!-- Filters Section -->
+        <div class="bg-white rounded-3 p-3 shadow-sm mb-4">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Date From</label>
+                    <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Date To</label>
+                    <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">Payment Method</label>
+                    <select class="form-select" name="payment_method">
+                        <option value="">All Methods</option>
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="mobile">Mobile Money</option>
+                        <option value="credit">Credit</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter me-2"></i>Filter
+                        </button>
+                        <a href="{% url 'sales_history' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times me-2"></i>Clear
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Sales Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="bg-white rounded-3 p-3 shadow-sm">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-primary bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-shopping-cart text-primary fa-lg"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Total Sales</h6>
+                            <h4 class="fw-bold text-primary mb-0">{{ sales.count }}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-white rounded-3 p-3 shadow-sm">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-success bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-coins text-success fa-lg"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Total Revenue</h6>
+                            <h4 class="fw-bold text-success mb-0">KES {% widthratio sales|length 1 1 as total_revenue %}{{ total_revenue|floatformat:2|default:"0.00" }}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-white rounded-3 p-3 shadow-sm">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-chart-line text-warning fa-lg"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Avg. Sale</h6>
+                            <h4 class="fw-bold text-warning mb-0">KES 0.00</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="bg-white rounded-3 p-3 shadow-sm">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-info bg-opacity-10 rounded-3 p-3 me-3">
+                            <i class="fas fa-calendar text-info fa-lg"></i>
+                        </div>
+                        <div>
+                            <h6 class="mb-1">Today's Sales</h6>
+                            <h4 class="fw-bold text-info mb-0">0</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sales Table -->
+        <div class="bg-white rounded-3 shadow-sm">
+            <div class="p-3 border-bottom">
+                <h6 class="fw-bold mb-0">Sales Transactions</h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Sale #</th>
+                            <th>Date & Time</th>
+                            <th>Customer</th>
+                            <th>Cashier</th>
+                            <th>Items</th>
+                            <th>Payment Method</th>
+                            <th>Total Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sale in sales %}
+                        <tr>
+                            <td>
+                                <span class="fw-semibold text-primary">{{ sale.sale_number }}</span>
+                            </td>
+                            <td>
+                                <div>{{ sale.created_at|date:"M d, Y" }}</div>
+                                <small class="text-muted">{{ sale.created_at|time:"g:i A" }}</small>
+                            </td>
+                            <td>
+                                {% if sale.customer %}
+                                    <div>{{ sale.customer.name }}</div>
+                                    <small class="text-muted">{{ sale.customer.get_loyalty_tier_display }}</small>
+                                {% else %}
+                                    <span class="text-muted">Walk-in Customer</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ sale.cashier.get_full_name|default:sale.cashier.username }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ sale.items.count }} items</span>
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if sale.payment_method == 'cash' %}bg-success
+                                    {% elif sale.payment_method == 'card' %}bg-primary
+                                    {% elif sale.payment_method == 'mobile' %}bg-info
+                                    {% else %}bg-warning{% endif %}">
+                                    {{ sale.get_payment_method_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="fw-bold text-success">KES {{ sale.final_amount }}</span>
+                                {% if sale.discount_amount > 0 %}
+                                    <div>
+                                        <small class="text-muted">Discount: KES {{ sale.discount_amount }}</small>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'sale_detail' sale.id %}" class="btn btn-outline-primary" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button class="btn btn-outline-secondary" onclick="printReceipt({{ sale.id }})" title="Print Receipt">
+                                        <i class="fas fa-print"></i>
+                                    </button>
+                                    <button class="btn btn-outline-info" onclick="emailReceipt({{ sale.id }})" title="Email Receipt">
+                                        <i class="fas fa-envelope"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+                                <h6 class="text-muted">No sales found</h6>
+                                <p class="text-muted mb-0">No sales transactions match your current filters.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if sales.has_other_pages %}
+            <div class="p-3 border-top">
+                <nav aria-label="Sales pagination">
+                    <ul class="pagination pagination-sm mb-0 justify-content-center">
+                        {% if sales.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ sales.previous_page_number }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">Previous</a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in sales.paginator.page_range %}
+                            {% if sales.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">{{ num }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if sales.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ sales.next_page_number }}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">Next</a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function searchSales() {
+    const query = document.getElementById('salesSearch').value;
+    // Implement search functionality
+    console.log('Searching for:', query);
+}
+
+function exportSales() {
+    // Implement export functionality
+    window.location.href = '#';
+}
+
+function printReport() {
+    window.print();
+}
+
+function printReceipt(saleId) {
+    window.open(`/sales/${saleId}/print/`, '_blank');
+}
+
+function emailReceipt(saleId) {
+    // Implement email receipt functionality
+    fetch(`/sales/${saleId}/email/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Receipt sent successfully!', 'success');
+        } else {
+            showToast('Failed to send receipt', 'danger');
+        }
+    });
+}
+
+// Auto-submit form when dates change
+document.addEventListener('DOMContentLoaded', function() {
+    const dateInputs = document.querySelectorAll('input[type="date"]');
+    dateInputs.forEach(input => {
+        input.addEventListener('change', function() {
+            // Optional: Auto-submit on date change
+            // this.form.submit();
+        });
+    });
+});
+</script>
+{% endblock %}

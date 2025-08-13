@@ -10,6 +10,67 @@ from datetime import datetime, timedelta
 from django.db import models
 from .models import Product, Category, Sale, SaleItem, Customer, Discount, Inventory
 
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_protect
+from django.http import JsonResponse
+import json
+
+@csrf_protect
+def login_view(request):
+    """
+    Handle user login with professional form
+    """
+    if request.user.is_authenticated:
+        return redirect('dashboard')  # Redirect to your main dashboard
+    
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        password = request.POST.get('password', '')
+        remember_me = request.POST.get('remember_me')
+        
+        if not username or not password:
+            messages.error(request, 'Please enter both username and password.')
+            return render(request, 'auth/login.html')
+        
+        user = authenticate(request, username=username, password=password)
+        
+        if user is not None:
+            if user.is_active:
+                login(request, user)
+                
+                # Handle remember me functionality
+                if not remember_me:
+                    request.session.set_expiry(0)  # Session expires when browser closes
+                else:
+                    request.session.set_expiry(1209600)  # 2 weeks
+                
+                messages.success(request, f'Welcome back, {user.get_full_name() or user.username}!')
+                
+                # Redirect to next page or dashboard
+                next_page = request.GET.get('next', 'dashboard')
+                return redirect(next_page)
+            else:
+                messages.error(request, 'Your account has been deactivated. Please contact administrator.')
+        else:
+            messages.error(request, 'Invalid username or password. Please try again.')
+    
+    return render(request, 'auth/login.html')
+
+@login_required
+def logout_view(request):
+    """
+    Handle user logout
+    """
+    user_name = request.user.get_full_name() or request.user.username
+    logout(request)
+    messages.success(request, f'You have been logged out successfully. See you soon!')
+    return redirect('login')
+
+
+
 @login_required
 def dashboard(request):
     """Main dashboard view"""
