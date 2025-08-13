@@ -11,7 +11,7 @@
             <div class="stat-icon bg-success">
                 <i class="fas fa-dollar-sign"></i>
             </div>
-            <h3 class="mb-1">${{ total_sales_today|floatformat:2 }}</h3>
+            <h3 class="mb-1">KES{{ total_sales_today|floatformat:2 }}</h3>
             <p class="text-muted mb-0">Today's Sales</p>
         </div>
     </div>
@@ -101,7 +101,7 @@
                             </div>
                             
                             <div class="d-flex justify-content-between align-items-center">
-                                <div class="product-price">${{ product.price }}</div>
+                                <div class="product-price">KES{{ product.price }}</div>
                                 <small class="text-muted">Stock: {{ product.stock_quantity }}</small>
                             </div>
                             
@@ -175,7 +175,7 @@
                                 <input type="number" class="qty-input" value="1" readonly>
                                 <button class="qty-btn" onclick="updateQuantity(1, 1)">+</button>
                             </div>
-                            <span class="fw-bold text-primary">$1580.00</span>
+                            <span class="fw-bold text-primary">KES1580.00</span>
                         </div>
                     </div>
                     
@@ -192,7 +192,7 @@
                                 <input type="number" class="qty-input" value="2" readonly>
                                 <button class="qty-btn" onclick="updateQuantity(2, 1)">+</button>
                             </div>
-                            <span class="fw-bold text-primary">$398</span>
+                            <span class="fw-bold text-primary">KES398</span>
                         </div>
                     </div>
                     
@@ -209,7 +209,7 @@
                                 <input type="number" class="qty-input" value="1" readonly>
                                 <button class="qty-btn" onclick="updateQuantity(3, 1)">+</button>
                             </div>
-                            <span class="fw-bold text-primary">$3000</span>
+                            <span class="fw-bold text-primary">KES3000</span>
                         </div>
                     </div>
                     
@@ -226,7 +226,7 @@
                                 <input type="number" class="qty-input" value="1" readonly>
                                 <button class="qty-btn" onclick="updateQuantity(4, 1)">+</button>
                             </div>
-                            <span class="fw-bold text-primary">$3000</span>
+                            <span class="fw-bold text-primary">KES3000</span>
                         </div>
                     </div>
                 </div>
@@ -237,7 +237,7 @@
                         <i class="fas fa-percentage me-2"></i>
                         <span class="fw-semibold">Discount: 5%</span>
                     </div>
-                    <small class="text-muted">For $20 Minimum Purchase, all items</small>
+                    <small class="text-muted">For KES20 Minimum Purchase, all items</small>
                 </div>
                 
                 <!-- Payment Summary -->
@@ -245,20 +245,20 @@
                     <h6 class="fw-bold mb-3">Payment Summary</h6>
                     <div class="d-flex justify-content-between mb-2">
                         <span>Subtotal:</span>
-                        <span>$7,978.00</span>
+                        <span>KES7,978.00</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span>Discount:</span>
-                        <span class="text-success">-$398.90</span>
+                        <span class="text-success">-KES398.90</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span>Tax:</span>
-                        <span>$0.00</span>
+                        <span>KES0.00</span>
                     </div>
                     <hr>
                     <div class="d-flex justify-content-between fw-bold fs-5">
                         <span>Total:</span>
-                        <span class="text-primary">$7,579.10</span>
+                        <span class="text-primary">KES7,579.10</span>
                     </div>
                 </div>
                 
@@ -306,7 +306,7 @@
                             <td><span class="fw-semibold">{{ sale.sale_number }}</span></td>
                             <td>{{ sale.customer.name|default:"Walk-in" }}</td>
                             <td>{{ sale.items.count }} items</td>
-                            <td class="fw-bold text-primary">${{ sale.final_amount }}</td>
+                            <td class="fw-bold text-primary">KES{{ sale.final_amount }}</td>
                             <td>
                                 <span class="badge bg-{{ sale.payment_method|default:'secondary' }}">
                                     {{ sale.get_payment_method_display }}

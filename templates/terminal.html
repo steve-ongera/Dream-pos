@@ -64,7 +64,7 @@
                             <div class="product-name">{{ product.name }}</div>
                             <div class="product-category">{{ product.category.name }}</div>
                             <div class="d-flex justify-content-between align-items-center mt-2">
-                                <div class="product-price">${{ product.price }}</div>
+                                <div class="product-price">KES {{ product.price }}</div>
                                 <small class="text-muted">{{ product.stock_quantity }} left</small>
                             </div>
                             
@@ -161,20 +161,20 @@
             <div class="p-3 border-top">
                 <div class="d-flex justify-content-between mb-2">
                     <span>Subtotal:</span>
-                    <span id="subtotal">$0.00</span>
+                    <span id="subtotal">KES 0.00</span>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span>Discount:</span>
-                    <span id="discountAmount" class="text-success">$0.00</span>
+                    <span id="discountAmount" class="text-success">KES 0.00</span>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span>Tax:</span>
-                    <span id="taxAmount">$0.00</span>
+                    <span id="taxAmount">KES 0.00</span>
                 </div>
                 <hr>
                 <div class="d-flex justify-content-between fw-bold fs-5 mb-3">
                     <span>Total:</span>
-                    <span id="totalAmount" class="text-primary">$0.00</span>
+                    <span id="totalAmount" class="text-primary">KES 0.00</span>
                 </div>
                 
                 <!-- Payment Method -->
@@ -202,11 +202,11 @@
                 <div class="mb-3" id="amountPaidSection">
                     <label class="form-label fw-semibold">Amount Paid</label>
                     <div class="input-group">
-                        <span class="input-group-text">$</span>
+                        <span class="input-group-text">KES</span>
                         <input type="number" class="form-control" id="amountPaid" placeholder="0.00" step="0.01" onchange="calculateChange()">
                     </div>
                     <div id="changeAmount" class="mt-2 fw-bold text-success" style="display: none;">
-                        Change: $<span id="changeValue">0.00</span>
+                        Change: KES <span id="changeValue">0.00</span>
                     </div>
                 </div>
                 
@@ -282,14 +282,14 @@
                         <div class="bg-light p-3 rounded">
                             <h6 class="fw-bold">Payment Details</h6>
                             <div class="mb-2">
-                                <strong>Total: $<span id="paymentTotal">0.00</span></strong>
+                                <strong>Total: KES <span id="paymentTotal">0.00</span></strong>
                             </div>
                             <div class="mb-2">
                                 Method: <span id="paymentMethodDisplay">Cash</span>
                             </div>
                             <div id="changeDisplay" style="display: none;">
                                 <div class="alert alert-success mb-0">
-                                    <strong>Change: $<span id="paymentChange">0.00</span></strong>
+                                    <strong>Change: KES <span id="paymentChange">0.00</span></strong>
                                 </div>
                             </div>
                         </div>
@@ -411,7 +411,7 @@ function updateCartDisplay() {
                             <input type="number" class="qty-input" value="${item.quantity}" readonly>
                             <button class="qty-btn" onclick="updateQuantity(${item.productId}, 1)">+</button>
                         </div>
-                        <span class="fw-bold text-primary">$${itemTotal.toFixed(2)}</span>
+                        <span class="fw-bold text-primary">KES ${itemTotal.toFixed(2)}</span>
                     </div>
                 </div>
             `;
@@ -435,10 +435,10 @@ function calculateTotals() {
     const taxAmount = 0; // Implement tax calculation if needed
     const total = subtotal - discountAmount + taxAmount;
     
-    document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
-    document.getElementById('discountAmount').textContent = `-$${discountAmount.toFixed(2)}`;
-    document.getElementById('taxAmount').textContent = `$${taxAmount.toFixed(2)}`;
-    document.getElementById('totalAmount').textContent = `$${total.toFixed(2)}`;
+    document.getElementById('subtotal').textContent = `KES ${subtotal.toFixed(2)}`;
+    document.getElementById('discountAmount').textContent = `-KES ${discountAmount.toFixed(2)}`;
+    document.getElementById('taxAmount').textContent = `KES ${taxAmount.toFixed(2)}`;
+    document.getElementById('totalAmount').textContent = `KES ${total.toFixed(2)}`;
     
     // Update payment modal if open
     document.getElementById('paymentTotal').textContent = total.toFixed(2);
@@ -498,7 +498,7 @@ function applyDiscount() {
             discountInfo.className = 'alert alert-success';
         } else {
             document.getElementById('discountText').textContent = 
-                `Minimum purchase of $${selectedDiscount.minimum} required for this discount`;
+                `Minimum purchase of KES ${selectedDiscount.minimum} required for this discount`;
             discountInfo.className = 'alert alert-warning';
         }
         discountInfo.style.display = 'block';
@@ -511,7 +511,7 @@ function applyDiscount() {
 }
 
 function calculateChange() {
-    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('$', ''));
+    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
     const paid = parseFloat(document.getElementById('amountPaid').value) || 0;
     const change = paid - total;
     
@@ -533,7 +533,7 @@ function processPayment() {
         return;
     }
     
-    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('$', ''));
+    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
     const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
     const amountPaid = parseFloat(document.getElementById('amountPaid').value) || total;
     
@@ -558,8 +558,8 @@ function updatePaymentModal() {
             <tr>
                 <td>${item.name}</td>
                 <td>${item.quantity}</td>
-                <td>$${item.price.toFixed(2)}</td>
-                <td>$${itemTotal.toFixed(2)}</td>
+                <td>KES ${item.price.toFixed(2)}</td>
+                <td>KES ${itemTotal.toFixed(2)}</td>
             </tr>
         `;
     });
@@ -572,7 +572,7 @@ function updatePaymentModal() {
         paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
     
     if (paymentMethod === 'cash') {
-        const total = parseFloat(document.getElementById('totalAmount').textContent.replace('$', ''));
+        const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
         const paid = parseFloat(document.getElementById('amountPaid').value) || total;
         const change = paid - total;
         
@@ -597,7 +597,7 @@ function confirmPayment() {
         customer_id: currentCustomer ? currentCustomer.id : null,
         payment_method: document.querySelector('input[name="paymentMethod"]:checked').value,
         amount_paid: parseFloat(document.getElementById('amountPaid').value) || 
-                    parseFloat(document.getElementById('totalAmount').textContent.replace('$', '')),
+                    parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', '')),
         discount_id: selectedDiscount ? selectedDiscount.id : null
     };
     
@@ -651,8 +651,8 @@ function showReceipt(saleData) {
             </div>
             <hr>
             <div class="text-start">
-                <p><strong>Total:</strong> ${saleData.total}</p>
-                ${saleData.change > 0 ? `<p><strong>Change:</strong> ${saleData.change}</p>` : ''}
+                <p><strong>Total:</strong> KES ${saleData.total}</p>
+                ${saleData.change > 0 ? `<p><strong>Change:</strong> KES ${saleData.change}</p>` : ''}
             </div>
         </div>
     `;
@@ -726,7 +726,7 @@ function updateProductsDisplay(products) {
                         <div class="product-name">${product.name}</div>
                         <div class="product-category">${product.category}</div>
                         <div class="d-flex justify-content-between align-items-center mt-2">
-                            <div class="product-price">${product.price}</div>
+                            <div class="product-price">KES ${product.price}</div>
                             <small class="text-muted">${product.stock} left</small>
                         </div>
                     </div>
