@@ -1,0 +1,438 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Dreams POS{% endblock %}
+
+{% block content %}
+<!-- Stats Row -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-success">
+                <i class="fas fa-dollar-sign"></i>
+            </div>
+            <h3 class="mb-1">${{ total_sales_today|floatformat:2 }}</h3>
+            <p class="text-muted mb-0">Today's Sales</p>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-info">
+                <i class="fas fa-shopping-cart"></i>
+            </div>
+            <h3 class="mb-1">{{ total_transactions }}</h3>
+            <p class="text-muted mb-0">Transactions</p>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning">
+                <i class="fas fa-boxes"></i>
+            </div>
+            <h3 class="mb-1">{{ low_stock_products.count }}</h3>
+            <p class="text-muted mb-0">Low Stock Items</p>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary">
+                <i class="fas fa-users"></i>
+            </div>
+            <h3 class="mb-1">125</h3>
+            <p class="text-muted mb-0">Active Customers</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Categories Sidebar -->
+    <div class="col-lg-2 mb-4">
+        <div class="bg-white rounded-3 p-3 shadow-sm">
+            <h6 class="fw-bold mb-3">Categories</h6>
+            {% for category in categories %}
+                <a href="#" class="category-btn" data-category="{{ category.id }}">
+                    <i class="fas fa-{{ category.icon|default:'box' }} mb-2"></i>
+                    <div class="fw-semibold">{{ category.name }}</div>
+                </a>
+            {% empty %}
+                <p class="text-muted">No categories available</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Products Grid -->
+    <div class="col-lg-7 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold">Featured Products</h5>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-view="grid">
+                    <i class="fas fa-th-large"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm active" data-view="list">
+                    <i class="fas fa-list"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="row" id="productsGrid">
+            {% for product in products %}
+                <div class="col-lg-4 col-md-6 mb-3">
+                    <div class="product-card h-100" data-product-id="{{ product.id }}">
+                        {% if product.image %}
+                            <img src="{{ product.image.url }}" alt="{{ product.name }}" class="product-image">
+                        {% else %}
+                            <div class="product-image bg-light d-flex align-items-center justify-content-center">
+                                <i class="fas fa-image text-muted fa-2x"></i>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="product-info">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1">
+                                    <div class="product-name">{{ product.name }}</div>
+                                    <div class="product-category">{{ product.category.name }}</div>
+                                </div>
+                                <button class="add-btn" onclick="addToCart({{ product.id }}, '{{ product.name }}', {{ product.price }})">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="product-price">${{ product.price }}</div>
+                                <small class="text-muted">Stock: {{ product.stock_quantity }}</small>
+                            </div>
+                            
+                            {% if product.is_low_stock %}
+                                <div class="mt-2">
+                                    <span class="badge bg-warning text-dark">Low Stock</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="col-12">
+                    <div class="text-center py-5">
+                        <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">No products available</h6>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Order Panel -->
+    <div class="col-lg-3">
+        <div class="order-section">
+            <div class="order-header">
+                <h6 class="mb-1">Order List</h6>
+                <small>Current Cart</small>
+            </div>
+            
+            <!-- Customer Selection -->
+            <div class="customer-info">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0">Customer</label>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#customerModal">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <select class="form-select form-select-sm" id="customerSelect">
+                    <option value="">Walk-in Customer</option>
+                    <!-- Customer options will be populated via JavaScript -->
+                </select>
+            </div>
+            
+            <!-- Cart Items -->
+            <div class="p-3">
+                <h6 class="fw-bold mb-3">Customer Information</h6>
+                <div id="selectedCustomerInfo" class="mb-3" style="display: none;">
+                    <div class="bg-light p-2 rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold" id="customerName">James Anderson</span>
+                            <span class="discount-badge" id="customerTier">Bronze</span>
+                        </div>
+                        <small class="text-muted" id="customerLoyalty">Loyalty Points: 150</small>
+                    </div>
+                </div>
+                
+                <h6 class="fw-bold mb-3">Order Details</h6>
+                <div id="cartItems">
+                    <!-- Sample cart items based on your image -->
+                    <div class="cart-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-semibold">iPhone 14 64GB</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(1)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="quantity-controls">
+                                <button class="qty-btn" onclick="updateQuantity(1, -1)">-</button>
+                                <input type="number" class="qty-input" value="1" readonly>
+                                <button class="qty-btn" onclick="updateQuantity(1, 1)">+</button>
+                            </div>
+                            <span class="fw-bold text-primary">$1580.00</span>
+                        </div>
+                    </div>
+                    
+                    <div class="cart-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-semibold">Red Nike Angelo</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(2)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="quantity-controls">
+                                <button class="qty-btn" onclick="updateQuantity(2, -1)">-</button>
+                                <input type="number" class="qty-input" value="2" readonly>
+                                <button class="qty-btn" onclick="updateQuantity(2, 1)">+</button>
+                            </div>
+                            <span class="fw-bold text-primary">$398</span>
+                        </div>
+                    </div>
+                    
+                    <div class="cart-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-semibold">Tablet 5 GO</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(3)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="quantity-controls">
+                                <button class="qty-btn" onclick="updateQuantity(3, -1)">-</button>
+                                <input type="number" class="qty-input" value="1" readonly>
+                                <button class="qty-btn" onclick="updateQuantity(3, 1)">+</button>
+                            </div>
+                            <span class="fw-bold text-primary">$3000</span>
+                        </div>
+                    </div>
+                    
+                    <div class="cart-item mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-semibold">HeadSet Slim 3</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(4)">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="quantity-controls">
+                                <button class="qty-btn" onclick="updateQuantity(4, -1)">-</button>
+                                <input type="number" class="qty-input" value="1" readonly>
+                                <button class="qty-btn" onclick="updateQuantity(4, 1)">+</button>
+                            </div>
+                            <span class="fw-bold text-primary">$3000</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Discount Section -->
+                <div class="bg-light p-3 rounded mb-3">
+                    <div class="d-flex align-items-center text-primary">
+                        <i class="fas fa-percentage me-2"></i>
+                        <span class="fw-semibold">Discount: 5%</span>
+                    </div>
+                    <small class="text-muted">For $20 Minimum Purchase, all items</small>
+                </div>
+                
+                <!-- Payment Summary -->
+                <div class="border-top pt-3">
+                    <h6 class="fw-bold mb-3">Payment Summary</h6>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Subtotal:</span>
+                        <span>$7,978.00</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Discount:</span>
+                        <span class="text-success">-$398.90</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Tax:</span>
+                        <span>$0.00</span>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between fw-bold fs-5">
+                        <span>Total:</span>
+                        <span class="text-primary">$7,579.10</span>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="mt-4">
+                    <button class="btn btn-primary-custom w-100 mb-2" onclick="processPayment()">
+                        <i class="fas fa-credit-card me-2"></i>
+                        Process Payment
+                    </button>
+                    <button class="btn btn-outline-secondary w-100" onclick="clearCart()">
+                        <i class="fas fa-trash me-2"></i>
+                        Clear Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Sales Section -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="bg-white rounded-3 p-4 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold mb-0">Recent Sales</h5>
+                <a href="{% url 'sales_history' %}" class="btn btn-outline-primary btn-sm">View All</a>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Sale #</th>
+                            <th>Customer</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Payment Method</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sale in recent_sales %}
+                        <tr>
+                            <td><span class="fw-semibold">{{ sale.sale_number }}</span></td>
+                            <td>{{ sale.customer.name|default:"Walk-in" }}</td>
+                            <td>{{ sale.items.count }} items</td>
+                            <td class="fw-bold text-primary">${{ sale.final_amount }}</td>
+                            <td>
+                                <span class="badge bg-{{ sale.payment_method|default:'secondary' }}">
+                                    {{ sale.get_payment_method_display }}
+                                </span>
+                            </td>
+                            <td>{{ sale.created_at|date:"M d, H:i" }}</td>
+                            <td>
+                                <a href="{% url 'sale_detail' sale.id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <i class="fas fa-receipt fa-2x text-muted mb-2"></i>
+                                <p class="text-muted mb-0">No recent sales</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Cart management
+let cart = [];
+let currentCustomer = null;
+
+function addToCart(productId, productName, price) {
+    const existingItem = cart.find(item => item.productId === productId);
+    
+    if (existingItem) {
+        existingItem.quantity += 1;
+        existingItem.total = existingItem.quantity * existingItem.price;
+    } else {
+        cart.push({
+            productId: productId,
+            name: productName,
+            price: price,
+            quantity: 1,
+            total: price
+        });
+    }
+    
+    updateCartDisplay();
+    showToast(`${productName} added to cart`, 'success');
+}
+
+function removeFromCart(productId) {
+    cart = cart.filter(item => item.productId !== productId);
+    updateCartDisplay();
+}
+
+function updateQuantity(productId, change) {
+    const item = cart.find(item => item.productId === productId);
+    if (item) {
+        item.quantity += change;
+        if (item.quantity <= 0) {
+            removeFromCart(productId);
+        } else {
+            item.total = item.quantity * item.price;
+            updateCartDisplay();
+        }
+    }
+}
+
+function updateCartDisplay() {
+    // Update cart display logic
+    console.log('Cart updated:', cart);
+}
+
+function clearCart() {
+    if (confirm('Are you sure you want to clear the cart?')) {
+        cart = [];
+        updateCartDisplay();
+        showToast('Cart cleared', 'info');
+    }
+}
+
+function processPayment() {
+    if (cart.length === 0) {
+        showToast('Cart is empty', 'warning');
+        return;
+    }
+    
+    // Redirect to POS terminal for payment processing
+    window.location.href = "{% url 'terminal' %}";
+}
+
+// Category filtering
+document.querySelectorAll('.category-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const categoryId = this.dataset.category;
+        
+        // Remove active class from all buttons
+        document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        // Filter products by category
+        filterProductsByCategory(categoryId);
+    });
+});
+
+function filterProductsByCategory(categoryId) {
+    // AJAX call to get products by category
+    fetch(`/pos/products/category/${categoryId}/`)
+        .then(response => response.json())
+        .then(data => {
+            updateProductsGrid(data.products);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error loading products', 'danger');
+        });
+}
+
+function updateProductsGrid(products) {
+    // Update products grid with filtered results
+    console.log('Updating products grid:', products);
+}
+</script>
+{% endblock %}

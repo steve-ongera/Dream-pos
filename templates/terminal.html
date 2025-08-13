@@ -1,0 +1,833 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}POS Terminal - Dreams POS{% endblock %}
+
+{% block search_bar %}
+<div class="input-group">
+    <input type="text" class="form-control search-bar" placeholder="Scan barcode or search products..." id="productSearch">
+    <button class="btn btn-outline-secondary" type="button" onclick="searchProducts()">
+        <i class="fas fa-search"></i>
+    </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Categories & Products -->
+    <div class="col-lg-8">
+        <!-- Categories -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="bg-white rounded-3 p-3 shadow-sm">
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-outline-primary category-filter active" data-category="all">
+                            <i class="fas fa-th-large me-2"></i>All
+                        </button>
+                        {% for category in categories %}
+                        <button class="btn btn-outline-primary category-filter" data-category="{{ category.id }}">
+                            <i class="fas fa-{{ category.icon|default:'box' }} me-2"></i>{{ category.name }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Products Grid -->
+        <div class="bg-white rounded-3 p-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">Products</h6>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary active" data-view="grid">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" data-view="list">
+                        <i class="fas fa-list"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="row" id="productsContainer">
+                {% for product in products %}
+                <div class="col-lg-3 col-md-4 col-sm-6 mb-3 product-item" data-category="{{ product.category.id }}">
+                    <div class="product-card h-100" onclick="addToCart({{ product.id }}, '{{ product.name|escapejs }}', {{ product.price }}, {{ product.stock_quantity }})">
+                        {% if product.image %}
+                            <img src="{{ product.image.url }}" alt="{{ product.name }}" class="product-image">
+                        {% else %}
+                            <div class="product-image bg-light d-flex align-items-center justify-content-center">
+                                <i class="fas fa-image text-muted fa-2x"></i>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="product-info">
+                            <div class="product-name">{{ product.name }}</div>
+                            <div class="product-category">{{ product.category.name }}</div>
+                            <div class="d-flex justify-content-between align-items-center mt-2">
+                                <div class="product-price">${{ product.price }}</div>
+                                <small class="text-muted">{{ product.stock_quantity }} left</small>
+                            </div>
+                            
+                            {% if product.is_low_stock %}
+                                <div class="mt-1">
+                                    <span class="badge bg-warning text-dark">Low Stock</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-12 text-center py-5">
+                    <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                    <h6 class="text-muted">No products available</h6>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Order Panel -->
+    <div class="col-lg-4">
+        <div class="order-section sticky-top" style="top: 20px;">
+            <div class="order-header">
+                <h6 class="mb-1">Current Order</h6>
+                <small id="orderTime">{{ current_date|date:"l, F d, Y" }}</small>
+            </div>
+            
+            <!-- Customer Selection -->
+            <div class="p-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0 fw-semibold">Customer</label>
+                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#customerModal">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <select class="form-select" id="customerSelect" onchange="selectCustomer()">
+                    <option value="">Walk-in Customer</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}" 
+                            data-name="{{ customer.name }}" 
+                            data-tier="{{ customer.loyalty_tier }}" 
+                            data-points="{{ customer.loyalty_points }}">
+                        {{ customer.name }} ({{ customer.get_loyalty_tier_display }})
+                    </option>
+                    {% endfor %}
+                </select>
+                
+                <div id="customerInfo" class="mt-2" style="display: none;">
+                    <div class="bg-light p-2 rounded">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold" id="customerNameDisplay"></span>
+                            <span class="badge" id="customerTierBadge"></span>
+                        </div>
+                        <small class="text-muted">Points: <span id="customerPoints"></span></small>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Cart Items -->
+            <div class="p-3 flex-grow-1" style="max-height: 400px; overflow-y: auto;">
+                <div id="cartItems">
+                    <div class="text-center py-4">
+                        <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Cart is empty</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Discount Section -->
+            <div class="p-3 border-top">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Apply Discount</label>
+                    <select class="form-select" id="discountSelect" onchange="applyDiscount()">
+                        <option value="">No Discount</option>
+                        {% for discount in discounts %}
+                        <option value="{{ discount.id }}" 
+                                data-percentage="{{ discount.percentage }}" 
+                                data-minimum="{{ discount.minimum_amount }}">
+                            {{ discount.name }} ({{ discount.percentage }}%)
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div id="discountInfo" class="alert alert-info" style="display: none;">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <span id="discountText"></span>
+                </div>
+            </div>
+            
+            <!-- Order Summary -->
+            <div class="p-3 border-top">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Subtotal:</span>
+                    <span id="subtotal">$0.00</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Discount:</span>
+                    <span id="discountAmount" class="text-success">$0.00</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Tax:</span>
+                    <span id="taxAmount">$0.00</span>
+                </div>
+                <hr>
+                <div class="d-flex justify-content-between fw-bold fs-5 mb-3">
+                    <span>Total:</span>
+                    <span id="totalAmount" class="text-primary">$0.00</span>
+                </div>
+                
+                <!-- Payment Method -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Payment Method</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="paymentMethod" id="cash" value="cash" checked>
+                        <label class="btn btn-outline-primary" for="cash">
+                            <i class="fas fa-money-bill me-1"></i>Cash
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="paymentMethod" id="card" value="card">
+                        <label class="btn btn-outline-primary" for="card">
+                            <i class="fas fa-credit-card me-1"></i>Card
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="paymentMethod" id="mobile" value="mobile">
+                        <label class="btn btn-outline-primary" for="mobile">
+                            <i class="fas fa-mobile-alt me-1"></i>Mobile
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Amount Paid (for cash) -->
+                <div class="mb-3" id="amountPaidSection">
+                    <label class="form-label fw-semibold">Amount Paid</label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control" id="amountPaid" placeholder="0.00" step="0.01" onchange="calculateChange()">
+                    </div>
+                    <div id="changeAmount" class="mt-2 fw-bold text-success" style="display: none;">
+                        Change: $<span id="changeValue">0.00</span>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary-custom btn-lg" onclick="processPayment()" id="processBtn" disabled>
+                        <i class="fas fa-credit-card me-2"></i>
+                        Process Payment
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="clearCart()">
+                        <i class="fas fa-trash me-2"></i>
+                        Clear Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Customer Modal -->
+<div class="modal fade" id="customerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Customer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="customerForm">
+                    <div class="mb-3">
+                        <label class="form-label">Name *</label>
+                        <input type="text" class="form-control" id="customerName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="customerEmail">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Phone</label>
+                        <input type="tel" class="form-control" id="customerPhone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Address</label>
+                        <textarea class="form-control" id="customerAddress" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addNewCustomer()">Add Customer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-credit-card me-2"></i>Process Payment
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6 class="fw-bold mb-3">Order Summary</h6>
+                        <div id="paymentOrderSummary"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="bg-light p-3 rounded">
+                            <h6 class="fw-bold">Payment Details</h6>
+                            <div class="mb-2">
+                                <strong>Total: $<span id="paymentTotal">0.00</span></strong>
+                            </div>
+                            <div class="mb-2">
+                                Method: <span id="paymentMethodDisplay">Cash</span>
+                            </div>
+                            <div id="changeDisplay" style="display: none;">
+                                <div class="alert alert-success mb-0">
+                                    <strong>Change: $<span id="paymentChange">0.00</span></strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success btn-lg" onclick="confirmPayment()">
+                    <i class="fas fa-check me-2"></i>Confirm Payment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt me-2"></i>Sale Receipt
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="receiptContent" class="text-center">
+                    <!-- Receipt content will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="printReceipt()">
+                    <i class="fas fa-print me-2"></i>Print Receipt
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Cart management
+let cart = [];
+let currentCustomer = null;
+let selectedDiscount = null;
+
+function addToCart(productId, productName, price, stock) {
+    const existingItem = cart.find(item => item.productId === productId);
+    
+    if (existingItem) {
+        if (existingItem.quantity >= stock) {
+            showToast('Insufficient stock', 'warning');
+            return;
+        }
+        existingItem.quantity += 1;
+    } else {
+        cart.push({
+            productId: productId,
+            name: productName,
+            price: parseFloat(price),
+            quantity: 1,
+            stock: stock
+        });
+    }
+    
+    updateCartDisplay();
+    showToast(`${productName} added to cart`, 'success');
+}
+
+function removeFromCart(productId) {
+    cart = cart.filter(item => item.productId !== productId);
+    updateCartDisplay();
+}
+
+function updateQuantity(productId, change) {
+    const item = cart.find(item => item.productId === productId);
+    if (item) {
+        const newQuantity = item.quantity + change;
+        if (newQuantity <= 0) {
+            removeFromCart(productId);
+        } else if (newQuantity > item.stock) {
+            showToast('Insufficient stock', 'warning');
+        } else {
+            item.quantity = newQuantity;
+            updateCartDisplay();
+        }
+    }
+}
+
+function updateCartDisplay() {
+    const cartContainer = document.getElementById('cartItems');
+    
+    if (cart.length === 0) {
+        cartContainer.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+                <p class="text-muted">Cart is empty</p>
+            </div>
+        `;
+        document.getElementById('processBtn').disabled = true;
+    } else {
+        let cartHTML = '';
+        cart.forEach(item => {
+            const itemTotal = item.quantity * item.price;
+            cartHTML += `
+                <div class="cart-item mb-3 border-bottom pb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold">${item.name}</span>
+                        <button class="btn btn-sm btn-outline-danger" onclick="removeFromCart(${item.productId})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="quantity-controls">
+                            <button class="qty-btn" onclick="updateQuantity(${item.productId}, -1)">-</button>
+                            <input type="number" class="qty-input" value="${item.quantity}" readonly>
+                            <button class="qty-btn" onclick="updateQuantity(${item.productId}, 1)">+</button>
+                        </div>
+                        <span class="fw-bold text-primary">$${itemTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        cartContainer.innerHTML = cartHTML;
+        document.getElementById('processBtn').disabled = false;
+    }
+    
+    calculateTotals();
+}
+
+function calculateTotals() {
+    const subtotal = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+    let discountAmount = 0;
+    
+    // Apply discount if selected
+    if (selectedDiscount && subtotal >= selectedDiscount.minimum) {
+        discountAmount = (subtotal * selectedDiscount.percentage) / 100;
+    }
+    
+    const taxAmount = 0; // Implement tax calculation if needed
+    const total = subtotal - discountAmount + taxAmount;
+    
+    document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
+    document.getElementById('discountAmount').textContent = `-$${discountAmount.toFixed(2)}`;
+    document.getElementById('taxAmount').textContent = `$${taxAmount.toFixed(2)}`;
+    document.getElementById('totalAmount').textContent = `$${total.toFixed(2)}`;
+    
+    // Update payment modal if open
+    document.getElementById('paymentTotal').textContent = total.toFixed(2);
+}
+
+function selectCustomer() {
+    const select = document.getElementById('customerSelect');
+    const option = select.options[select.selectedIndex];
+    const customerInfo = document.getElementById('customerInfo');
+    
+    if (option.value) {
+        currentCustomer = {
+            id: option.value,
+            name: option.dataset.name,
+            tier: option.dataset.tier,
+            points: option.dataset.points
+        };
+        
+        document.getElementById('customerNameDisplay').textContent = currentCustomer.name;
+        document.getElementById('customerTierBadge').textContent = currentCustomer.tier.charAt(0).toUpperCase() + currentCustomer.tier.slice(1);
+        document.getElementById('customerTierBadge').className = `badge bg-${getTierColor(currentCustomer.tier)}`;
+        document.getElementById('customerPoints').textContent = currentCustomer.points;
+        
+        customerInfo.style.display = 'block';
+    } else {
+        currentCustomer = null;
+        customerInfo.style.display = 'none';
+    }
+}
+
+function getTierColor(tier) {
+    const colors = {
+        'bronze': 'warning',
+        'silver': 'secondary', 
+        'gold': 'warning',
+        'platinum': 'dark'
+    };
+    return colors[tier] || 'secondary';
+}
+
+function applyDiscount() {
+    const select = document.getElementById('discountSelect');
+    const option = select.options[select.selectedIndex];
+    const discountInfo = document.getElementById('discountInfo');
+    
+    if (option.value) {
+        selectedDiscount = {
+            id: option.value,
+            percentage: parseFloat(option.dataset.percentage),
+            minimum: parseFloat(option.dataset.minimum)
+        };
+        
+        const subtotal = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+        if (subtotal >= selectedDiscount.minimum) {
+            document.getElementById('discountText').textContent = 
+                `${selectedDiscount.percentage}% discount applied`;
+            discountInfo.className = 'alert alert-success';
+        } else {
+            document.getElementById('discountText').textContent = 
+                `Minimum purchase of $${selectedDiscount.minimum} required for this discount`;
+            discountInfo.className = 'alert alert-warning';
+        }
+        discountInfo.style.display = 'block';
+    } else {
+        selectedDiscount = null;
+        discountInfo.style.display = 'none';
+    }
+    
+    calculateTotals();
+}
+
+function calculateChange() {
+    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('$', ''));
+    const paid = parseFloat(document.getElementById('amountPaid').value) || 0;
+    const change = paid - total;
+    
+    const changeDisplay = document.getElementById('changeAmount');
+    const changeValue = document.getElementById('changeValue');
+    
+    if (change >= 0) {
+        changeValue.textContent = change.toFixed(2);
+        changeDisplay.style.display = 'block';
+        changeDisplay.className = 'mt-2 fw-bold text-success';
+    } else {
+        changeDisplay.style.display = 'none';
+    }
+}
+
+function processPayment() {
+    if (cart.length === 0) {
+        showToast('Cart is empty', 'warning');
+        return;
+    }
+    
+    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('$', ''));
+    const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+    const amountPaid = parseFloat(document.getElementById('amountPaid').value) || total;
+    
+    if (paymentMethod === 'cash' && amountPaid < total) {
+        showToast('Amount paid is less than total', 'warning');
+        return;
+    }
+    
+    // Show payment confirmation modal
+    updatePaymentModal();
+    new bootstrap.Modal(document.getElementById('paymentModal')).show();
+}
+
+function updatePaymentModal() {
+    const orderSummary = document.getElementById('paymentOrderSummary');
+    let summaryHTML = '<div class="table-responsive"><table class="table table-sm">';
+    summaryHTML += '<thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>';
+    
+    cart.forEach(item => {
+        const itemTotal = item.quantity * item.price;
+        summaryHTML += `
+            <tr>
+                <td>${item.name}</td>
+                <td>${item.quantity}</td>
+                <td>$${item.price.toFixed(2)}</td>
+                <td>$${itemTotal.toFixed(2)}</td>
+            </tr>
+        `;
+    });
+    
+    summaryHTML += '</tbody></table></div>';
+    orderSummary.innerHTML = summaryHTML;
+    
+    const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+    document.getElementById('paymentMethodDisplay').textContent = 
+        paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
+    
+    if (paymentMethod === 'cash') {
+        const total = parseFloat(document.getElementById('totalAmount').textContent.replace('$', ''));
+        const paid = parseFloat(document.getElementById('amountPaid').value) || total;
+        const change = paid - total;
+        
+        if (change > 0) {
+            document.getElementById('paymentChange').textContent = change.toFixed(2);
+            document.getElementById('changeDisplay').style.display = 'block';
+        } else {
+            document.getElementById('changeDisplay').style.display = 'none';
+        }
+    } else {
+        document.getElementById('changeDisplay').style.display = 'none';
+    }
+}
+
+function confirmPayment() {
+    const paymentData = {
+        items: cart.map(item => ({
+            product_id: item.productId,
+            quantity: item.quantity,
+            unit_price: item.price
+        })),
+        customer_id: currentCustomer ? currentCustomer.id : null,
+        payment_method: document.querySelector('input[name="paymentMethod"]:checked').value,
+        amount_paid: parseFloat(document.getElementById('amountPaid').value) || 
+                    parseFloat(document.getElementById('totalAmount').textContent.replace('$', '')),
+        discount_id: selectedDiscount ? selectedDiscount.id : null
+    };
+    
+    fetch('{% url "process_sale" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify(paymentData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Hide payment modal
+            bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+            
+            // Show receipt
+            showReceipt(data);
+            
+            // Clear cart
+            cart = [];
+            currentCustomer = null;
+            selectedDiscount = null;
+            updateCartDisplay();
+            resetForm();
+            
+            showToast('Payment processed successfully!', 'success');
+        } else {
+            showToast(data.error || 'Payment failed', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred while processing payment', 'danger');
+    });
+}
+
+function showReceipt(saleData) {
+    const receiptContent = document.getElementById('receiptContent');
+    receiptContent.innerHTML = `
+        <div class="receipt">
+            <h4 class="fw-bold">Dreams Store</h4>
+            <p class="mb-1">Thank you for your purchase!</p>
+            <hr>
+            <div class="text-start">
+                <p><strong>Sale #:</strong> ${saleData.sale_number}</p>
+                <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+                <p><strong>Cashier:</strong> {{ user.get_full_name|default:user.username }}</p>
+                ${currentCustomer ? `<p><strong>Customer:</strong> ${currentCustomer.name}</p>` : ''}
+            </div>
+            <hr>
+            <div class="text-start">
+                <p><strong>Total:</strong> ${saleData.total}</p>
+                ${saleData.change > 0 ? `<p><strong>Change:</strong> ${saleData.change}</p>` : ''}
+            </div>
+        </div>
+    `;
+    
+    new bootstrap.Modal(document.getElementById('receiptModal')).show();
+}
+
+function printReceipt() {
+    window.print();
+}
+
+function clearCart() {
+    if (cart.length === 0) return;
+    
+    if (confirm('Are you sure you want to clear the cart?')) {
+        cart = [];
+        updateCartDisplay();
+        resetForm();
+        showToast('Cart cleared', 'info');
+    }
+}
+
+function resetForm() {
+    document.getElementById('customerSelect').value = '';
+    document.getElementById('discountSelect').value = '';
+    document.getElementById('amountPaid').value = '';
+    document.getElementById('customerInfo').style.display = 'none';
+    document.getElementById('discountInfo').style.display = 'none';
+    document.getElementById('changeAmount').style.display = 'none';
+    currentCustomer = null;
+    selectedDiscount = null;
+}
+
+function searchProducts() {
+    const query = document.getElementById('productSearch').value;
+    if (query.length < 2) return;
+    
+    fetch(`{% url "search_products" %}?q=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+            updateProductsDisplay(data.products);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error searching products', 'danger');
+        });
+}
+
+function updateProductsDisplay(products) {
+    const container = document.getElementById('productsContainer');
+    
+    if (products.length === 0) {
+        container.innerHTML = `
+            <div class="col-12 text-center py-5">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h6 class="text-muted">No products found</h6>
+            </div>
+        `;
+        return;
+    }
+    
+    let productsHTML = '';
+    products.forEach(product => {
+        productsHTML += `
+            <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+                <div class="product-card h-100" onclick="addToCart(${product.id}, '${product.name}', ${product.price}, ${product.stock})">
+                    <div class="product-image bg-light d-flex align-items-center justify-content-center">
+                        <i class="fas fa-image text-muted fa-2x"></i>
+                    </div>
+                    <div class="product-info">
+                        <div class="product-name">${product.name}</div>
+                        <div class="product-category">${product.category}</div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div class="product-price">${product.price}</div>
+                            <small class="text-muted">${product.stock} left</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = productsHTML;
+}
+
+function addNewCustomer() {
+    const name = document.getElementById('customerName').value;
+    const email = document.getElementById('customerEmail').value;
+    const phone = document.getElementById('customerPhone').value;
+    const address = document.getElementById('customerAddress').value;
+    
+    if (!name) {
+        showToast('Customer name is required', 'warning');
+        return;
+    }
+    
+    // Here you would typically make an AJAX call to create the customer
+    // For now, we'll just simulate it
+    showToast('Customer added successfully', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('customerModal')).hide();
+    
+    // Reset form
+    document.getElementById('customerForm').reset();
+}
+
+// Category filtering
+document.querySelectorAll('.category-filter').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        const categoryId = this.dataset.category;
+        
+        if (categoryId === 'all') {
+            document.querySelectorAll('.product-item').forEach(item => {
+                item.style.display = 'block';
+            });
+        } else {
+            document.querySelectorAll('.product-item').forEach(item => {
+                if (item.dataset.category === categoryId) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+    });
+});
+
+// Payment method change handler
+document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const amountPaidSection = document.getElementById('amountPaidSection');
+        if (this.value === 'cash') {
+            amountPaidSection.style.display = 'block';
+        } else {
+            amountPaidSection.style.display = 'none';
+            document.getElementById('changeAmount').style.display = 'none';
+        }
+    });
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // F1 - New Sale
+    if (e.key === 'F1') {
+        e.preventDefault();
+        clearCart();
+    }
+    
+    // F2 - Process Payment
+    if (e.key === 'F2') {
+        e.preventDefault();
+        if (cart.length > 0) {
+            processPayment();
+        }
+    }
+    
+    // Escape - Clear cart
+    if (e.key === 'Escape') {
+        e.preventDefault();
+        clearCart();
+    }
+});
+
+// Search on enter
+document.getElementById('productSearch').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchProducts();
+    }
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    updateCartDisplay();
+});
+</script>
+{% endblock %}
