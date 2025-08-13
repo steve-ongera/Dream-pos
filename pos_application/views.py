@@ -353,3 +353,275 @@ def inventory_management(request):
     }
     
     return render(request, 'inventory.html', context)
+
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from django.db.models import Sum, Count, F, Q
+from django.db.models.functions import Extract
+from django.utils import timezone
+from datetime import datetime, timedelta
+import json
+from decimal import Decimal
+from .models import Customer, Sale, SaleItem, Product, Category
+
+# Customer Views
+@login_required
+def customers_list(request):
+    """Display customers list page"""
+    return render(request, 'customers.html')
+
+@login_required
+def customers_ajax(request):
+    """AJAX endpoint for customer data"""
+    if request.method == 'GET':
+        customers = Customer.objects.all().order_by('-created_at')
+        data = []
+        for customer in customers:
+            data.append({
+                'id': customer.id,
+                'name': customer.name,
+                'email': customer.email,
+                'phone': customer.phone,
+                'address': customer.address,
+                'loyalty_tier': customer.get_loyalty_tier_display(),
+                'loyalty_points': customer.loyalty_points,
+                'total_spent': str(customer.total_spent),
+                'discount_percentage': customer.discount_percentage,
+                'created_at': customer.created_at.strftime('%Y-%m-%d %H:%M')
+            })
+        return JsonResponse({'data': data})
+
+@login_required
+def customer_detail_ajax(request, customer_id):
+    """Get single customer details"""
+    try:
+        customer = Customer.objects.get(id=customer_id)
+        data = {
+            'id': customer.id,
+            'name': customer.name,
+            'email': customer.email,
+            'phone': customer.phone,
+            'address': customer.address,
+            'loyalty_tier': customer.loyalty_tier,
+            'loyalty_points': customer.loyalty_points,
+            'total_spent': str(customer.total_spent),
+            'created_at': customer.created_at.strftime('%Y-%m-%d %H:%M')
+        }
+        return JsonResponse({'success': True, 'data': data})
+    except Customer.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Customer not found'})
+
+@csrf_exempt
+@login_required
+def customer_create_ajax(request):
+    """Create new customer via AJAX"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            customer = Customer.objects.create(
+                name=data.get('name'),
+                email=data.get('email', ''),
+                phone=data.get('phone', ''),
+                address=data.get('address', ''),
+                loyalty_tier=data.get('loyalty_tier', 'bronze'),
+                loyalty_points=int(data.get('loyalty_points', 0))
+            )
+            return JsonResponse({
+                'success': True, 
+                'message': 'Customer created successfully',
+                'data': {
+                    'id': customer.id,
+                    'name': customer.name,
+                    'email': customer.email,
+                    'phone': customer.phone
+                }
+            })
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+
+@csrf_exempt
+@login_required
+def customer_update_ajax(request, customer_id):
+    """Update customer via AJAX"""
+    if request.method == 'POST':
+        try:
+            customer = Customer.objects.get(id=customer_id)
+            data = json.loads(request.body)
+            
+            customer.name = data.get('name', customer.name)
+            customer.email = data.get('email', customer.email)
+            customer.phone = data.get('phone', customer.phone)
+            customer.address = data.get('address', customer.address)
+            customer.loyalty_tier = data.get('loyalty_tier', customer.loyalty_tier)
+            customer.loyalty_points = int(data.get('loyalty_points', customer.loyalty_points))
+            customer.save()
+            
+            return JsonResponse({'success': True, 'message': 'Customer updated successfully'})
+        except Customer.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Customer not found'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+
+@csrf_exempt
+@login_required
+def customer_delete_ajax(request, customer_id):
+    """Delete customer via AJAX"""
+    if request.method == 'POST':
+        try:
+            customer = Customer.objects.get(id=customer_id)
+            customer.delete()
+            return JsonResponse({'success': True, 'message': 'Customer deleted successfully'})
+        except Customer.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Customer not found'})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+
+# Reports Views
+@login_required
+def reports_view(request):
+    """Display reports dashboard"""
+    return render(request, 'reports.html')
+
+@login_required
+def sales_data_ajax(request):
+    """Get sales data for the past year"""
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=365)
+    
+    # Monthly sales data
+    monthly_sales = Sale.objects.filter(
+        created_at__range=[start_date, end_date]
+    ).extra(
+        select={'month': "DATE_TRUNC('month', created_at)"}
+    ).values('month').annotate(
+        total_sales=Sum('final_amount'),
+        total_orders=Count('id')
+    ).order_by('month')
+    
+    # Format data for Chart.js
+    months = []
+    sales = []
+    orders = []
+    
+    for item in monthly_sales:
+        months.append(item['month'].strftime('%Y-%m'))
+        sales.append(float(item['total_sales'] or 0))
+        orders.append(item['total_orders'])
+    
+    return JsonResponse({
+        'months': months,
+        'sales': sales,
+        'orders': orders
+    })
+
+@login_required
+def top_products_ajax(request):
+    """Get most sold products"""
+    top_products = SaleItem.objects.values(
+        'product__name'
+    ).annotate(
+        total_quantity=Sum('quantity'),
+        total_revenue=Sum('total_price')
+    ).order_by('-total_quantity')[:10]
+    
+    products = []
+    quantities = []
+    revenues = []
+    
+    for item in top_products:
+        products.append(item['product__name'])
+        quantities.append(item['total_quantity'])
+        revenues.append(float(item['total_revenue']))
+    
+    return JsonResponse({
+        'products': products,
+        'quantities': quantities,
+        'revenues': revenues
+    })
+
+@login_required
+def daily_sales_analysis_ajax(request):
+    """Analyze sales by day of week"""
+    sales_by_day = Sale.objects.annotate(
+        day_of_week=Extract('created_at', 'dow')
+    ).values('day_of_week').annotate(
+        total_sales=Sum('final_amount'),
+        total_orders=Count('id'),
+        avg_order_value=Sum('final_amount') / Count('id')
+    ).order_by('day_of_week')
+    
+    days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    day_sales = [0] * 7
+    day_orders = [0] * 7
+    day_avg = [0] * 7
+    
+    for item in sales_by_day:
+        day_index = item['day_of_week']
+        day_sales[day_index] = float(item['total_sales'] or 0)
+        day_orders[day_index] = item['total_orders']
+        day_avg[day_index] = float(item['avg_order_value'] or 0)
+    
+    return JsonResponse({
+        'days': days,
+        'sales': day_sales,
+        'orders': day_orders,
+        'avg_values': day_avg
+    })
+
+@login_required
+def sales_summary_ajax(request):
+    """Get sales summary statistics"""
+    today = timezone.now().date()
+    this_month_start = today.replace(day=1)
+    last_month_start = (this_month_start - timedelta(days=1)).replace(day=1)
+    
+    # Today's sales
+    today_sales = Sale.objects.filter(
+        created_at__date=today
+    ).aggregate(
+        total_sales=Sum('final_amount'),
+        total_orders=Count('id')
+    )
+    
+    # This month's sales
+    this_month_sales = Sale.objects.filter(
+        created_at__date__gte=this_month_start
+    ).aggregate(
+        total_sales=Sum('final_amount'),
+        total_orders=Count('id')
+    )
+    
+    # Last month's sales
+    last_month_sales = Sale.objects.filter(
+        created_at__date__gte=last_month_start,
+        created_at__date__lt=this_month_start
+    ).aggregate(
+        total_sales=Sum('final_amount'),
+        total_orders=Count('id')
+    )
+    
+    # Top customer
+    top_customer = Customer.objects.order_by('-total_spent').first()
+    
+    return JsonResponse({
+        'today_sales': float(today_sales['total_sales'] or 0),
+        'today_orders': today_sales['total_orders'] or 0,
+        'month_sales': float(this_month_sales['total_sales'] or 0),
+        'month_orders': this_month_sales['total_orders'] or 0,
+        'last_month_sales': float(last_month_sales['total_sales'] or 0),
+        'top_customer': top_customer.name if top_customer else 'No customers',
+        'total_customers': Customer.objects.count(),
+        'total_products': Product.objects.count(),
+        'low_stock_products': Product.objects.filter(
+            stock_quantity__lte=F('min_stock_level')
+        ).count()
+    })
+
+# Settings Views
+@login_required
+def settings_view(request):
+    """Display settings page"""
+    return render(request, 'settings.html')
