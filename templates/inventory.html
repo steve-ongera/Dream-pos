@@ -32,9 +32,9 @@
                 <button class="btn btn-outline-primary" onclick="exportInventory()">
                     <i class="fas fa-download me-2"></i>Export
                 </button>
-                <a href="#" class="btn btn-primary">
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal">
                     <i class="fas fa-plus me-2"></i>Add Product
-                </a>
+                </button>
             </div>
         </div>
 
@@ -56,20 +56,20 @@
                     <label class="form-label fw-semibold">Stock Status</label>
                     <select class="form-select" name="stock_status" onchange="this.form.submit()">
                         <option value="">All Products</option>
-                        <option value="low_stock">Low Stock</option>
-                        <option value="out_of_stock">Out of Stock</option>
-                        <option value="in_stock">In Stock</option>
+                        <option value="low_stock" {% if stock_status == 'low_stock' %}selected{% endif %}>Low Stock</option>
+                        <option value="out_of_stock" {% if stock_status == 'out_of_stock' %}selected{% endif %}>Out of Stock</option>
+                        <option value="in_stock" {% if stock_status == 'in_stock' %}selected{% endif %}>In Stock</option>
                     </select>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-semibold">Sort By</label>
                     <select class="form-select" name="sort_by" onchange="this.form.submit()">
-                        <option value="name">Name (A-Z)</option>
-                        <option value="-name">Name (Z-A)</option>
-                        <option value="stock_quantity">Stock (Low to High)</option>
-                        <option value="-stock_quantity">Stock (High to Low)</option>
-                        <option value="price">Price (Low to High)</option>
-                        <option value="-price">Price (High to Low)</option>
+                        <option value="name" {% if sort_by == 'name' %}selected{% endif %}>Name (A-Z)</option>
+                        <option value="-name" {% if sort_by == '-name' %}selected{% endif %}>Name (Z-A)</option>
+                        <option value="stock_quantity" {% if sort_by == 'stock_quantity' %}selected{% endif %}>Stock (Low to High)</option>
+                        <option value="-stock_quantity" {% if sort_by == '-stock_quantity' %}selected{% endif %}>Stock (High to Low)</option>
+                        <option value="price" {% if sort_by == 'price' %}selected{% endif %}>Price (Low to High)</option>
+                        <option value="-price" {% if sort_by == '-price' %}selected{% endif %}>Price (High to Low)</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -94,7 +94,7 @@
                         </div>
                         <div>
                             <h6 class="mb-1">Total Products</h6>
-                            <h4 class="fw-bold text-primary mb-0">{{ products.count }}</h4>
+                            <h4 class="fw-bold text-primary mb-0">{{ products|length }}</h4>
                         </div>
                     </div>
                 </div>
@@ -107,11 +107,7 @@
                         </div>
                         <div>
                             <h6 class="mb-1">In Stock</h6>
-                            <h4 class="fw-bold text-success mb-0">
-                                {% for product in products %}
-                                    {% if product.stock_quantity > product.min_stock_level %}1{% endif %}
-                                {% endfor %}
-                            </h4>
+                            <h4 class="fw-bold text-success mb-0" id="inStockCount">0</h4>
                         </div>
                     </div>
                 </div>
@@ -124,11 +120,7 @@
                         </div>
                         <div>
                             <h6 class="mb-1">Low Stock</h6>
-                            <h4 class="fw-bold text-warning mb-0">
-                                {% for product in products %}
-                                    {% if product.is_low_stock %}1{% endif %}
-                                {% endfor %}
-                            </h4>
+                            <h4 class="fw-bold text-warning mb-0" id="lowStockCount">0</h4>
                         </div>
                     </div>
                 </div>
@@ -141,11 +133,7 @@
                         </div>
                         <div>
                             <h6 class="mb-1">Out of Stock</h6>
-                            <h4 class="fw-bold text-danger mb-0">
-                                {% for product in products %}
-                                    {% if product.stock_quantity == 0 %}1{% endif %}
-                                {% endfor %}
-                            </h4>
+                            <h4 class="fw-bold text-danger mb-0" id="outOfStockCount">0</h4>
                         </div>
                     </div>
                 </div>
@@ -184,7 +172,7 @@
                     </thead>
                     <tbody>
                         {% for product in products %}
-                        <tr>
+                        <tr data-product-id="{{ product.id }}">
                             <td>
                                 <div class="d-flex align-items-center">
                                     {% if product.image %}
@@ -209,7 +197,7 @@
                             </td>
                             <td>{{ product.category.name }}</td>
                             <td>
-                                <span class="fw-bold {% if product.stock_quantity == 0 %}text-danger{% elif product.is_low_stock %}text-warning{% else %}text-success{% endif %}">
+                                <span class="fw-bold stock-quantity {% if product.stock_quantity == 0 %}text-danger{% elif product.is_low_stock %}text-warning{% else %}text-success{% endif %}">
                                     {{ product.stock_quantity }}
                                 </span>
                             </td>
@@ -217,23 +205,19 @@
                             <td>KES {{ product.price }}</td>
                             <td>KES {{ product.cost_price }}</td>
                             <td>
-                                <span class="fw-semibold">KES {% widthratio product.stock_quantity 1 product.cost_price %}</span>
+                                <span class="fw-semibold stock-value">KES {% widthratio product.stock_quantity 1 product.cost_price %}</span>
                             </td>
                             <td>
-                                {% if product.stock_quantity == 0 %}
-                                    <span class="badge bg-danger">Out of Stock</span>
-                                {% elif product.is_low_stock %}
-                                    <span class="badge bg-warning">Low Stock</span>
-                                {% else %}
-                                    <span class="badge bg-success">In Stock</span>
-                                {% endif %}
+                                <span class="stock-status badge {% if product.stock_quantity == 0 %}bg-danger{% elif product.is_low_stock %}bg-warning{% else %}bg-success{% endif %}">
+                                    {% if product.stock_quantity == 0 %}Out of Stock{% elif product.is_low_stock %}Low Stock{% else %}In Stock{% endif %}
+                                </span>
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
-                                    <button class="btn btn-outline-success" onclick="quickStockIn({{ product.id }})" title="Stock In">
+                                    <button class="btn btn-outline-success" onclick="quickStockIn({{ product.id }}, '{{ product.name }}')" title="Stock In">
                                         <i class="fas fa-plus"></i>
                                     </button>
-                                    <button class="btn btn-outline-warning" onclick="quickStockOut({{ product.id }})" title="Stock Out">
+                                    <button class="btn btn-outline-warning" onclick="quickStockOut({{ product.id }}, '{{ product.name }}', {{ product.stock_quantity }})" title="Stock Out">
                                         <i class="fas fa-minus"></i>
                                     </button>
                                     <a href="#" class="btn btn-outline-primary" title="Edit">
@@ -290,6 +274,89 @@
                 </nav>
             </div>
             {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Product Modal -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i>Add New Product
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addProductForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Product Name *</label>
+                                <input type="text" class="form-control" id="productName" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">SKU *</label>
+                                <input type="text" class="form-control" id="productSku" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Category *</label>
+                                <select class="form-select" id="productCategory" required>
+                                    <option value="">Select Category</option>
+                                    {% for category in categories %}
+                                    <option value="{{ category.id }}">{{ category.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Unit Price *</label>
+                                <input type="number" class="form-control" id="productPrice" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Cost Price</label>
+                                <input type="number" class="form-control" id="productCostPrice" step="0.01" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Initial Stock</label>
+                                <input type="number" class="form-control" id="productStock" min="0" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Min Stock Level</label>
+                                <input type="number" class="form-control" id="productMinStock" min="0" value="5">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="productDescription" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addProduct()">
+                    <i class="fas fa-save me-2"></i>Save Product
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -409,6 +476,7 @@
                     <div class="mb-3">
                         <label class="form-label">Quantity</label>
                         <input type="number" class="form-control" id="quickQuantity" min="1" required>
+                        <div class="form-text" id="quickAvailableStock" style="display: none;">Available: <span></span></div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Notes</label>
@@ -423,10 +491,62 @@
         </div>
     </div>
 </div>
+
+<!-- Product History Modal -->
+<div class="modal fade" id="productHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-history me-2"></i>Product History
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="productHistoryContent">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// CSRF token for AJAX requests
+const csrfToken = '{{ csrf_token }}';
+
+// Calculate and update stock counts on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateStockCounts();
+});
+
+function updateStockCounts() {
+    let inStock = 0, lowStock = 0, outOfStock = 0;
+    
+    document.querySelectorAll('tr[data-product-id]').forEach(row => {
+        const stockElement = row.querySelector('.stock-quantity');
+        const stockValue = parseInt(stockElement.textContent.trim());
+        
+        if (stockValue === 0) {
+            outOfStock++;
+        } else if (stockElement.classList.contains('text-warning')) {
+            lowStock++;
+        } else {
+            inStock++;
+        }
+    });
+    
+    document.getElementById('inStockCount').textContent = inStock;
+    document.getElementById('lowStockCount').textContent = lowStock;
+    document.getElementById('outOfStockCount').textContent = outOfStock;
+}
+
 function searchInventory() {
     const query = document.getElementById('inventorySearch').value;
     const url = new URL(window.location);
@@ -435,33 +555,76 @@ function searchInventory() {
 }
 
 function exportInventory() {
-    window.location.href = '#';
+    showLoadingToast('Preparing export...');
+    window.location.href = '{% url "export_inventory" %}';
 }
 
-function quickStockIn(productId) {
-    const productRow = document.querySelector(`tr[data-product-id="${productId}"]`);
-    const productName = productRow ? productRow.querySelector('.fw-semibold').textContent : 'Product';
+function addProduct() {
+    const formData = {
+        name: document.getElementById('productName').value.trim(),
+        sku: document.getElementById('productSku').value.trim(),
+        category_id: document.getElementById('productCategory').value,
+        description: document.getElementById('productDescription').value.trim(),
+        price: parseFloat(document.getElementById('productPrice').value) || 0,
+        cost_price: parseFloat(document.getElementById('productCostPrice').value) || 0,
+        stock_quantity: parseInt(document.getElementById('productStock').value) || 0,
+        min_stock_level: parseInt(document.getElementById('productMinStock').value) || 5
+    };
     
+    // Basic validation
+    if (!formData.name || !formData.sku || !formData.category_id || !formData.price) {
+        showToast('Please fill in all required fields', 'danger');
+        return;
+    }
+    
+    fetch('{% url "add_product" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Product added successfully!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('addProductModal')).hide();
+            location.reload();
+        } else {
+            showToast(data.error || 'Failed to add product', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred', 'danger');
+    });
+}
+
+function quickStockIn(productId, productName) {
     document.getElementById('quickProductId').value = productId;
     document.getElementById('quickStockType').value = 'in';
     document.getElementById('quickProductName').textContent = productName;
     document.getElementById('quickStockTitle').textContent = 'Quick Stock In';
     document.getElementById('quickQuantity').value = '';
     document.getElementById('quickNotes').value = '';
+    document.getElementById('quickAvailableStock').style.display = 'none';
     
     new bootstrap.Modal(document.getElementById('quickStockModal')).show();
 }
 
-function quickStockOut(productId) {
-    const productRow = document.querySelector(`tr[data-product-id="${productId}"]`);
-    const productName = productRow ? productRow.querySelector('.fw-semibold').textContent : 'Product';
-    
+function quickStockOut(productId, productName, currentStock) {
     document.getElementById('quickProductId').value = productId;
     document.getElementById('quickStockType').value = 'out';
     document.getElementById('quickProductName').textContent = productName;
     document.getElementById('quickStockTitle').textContent = 'Quick Stock Out';
     document.getElementById('quickQuantity').value = '';
+    document.getElementById('quickQuantity').max = currentStock;
     document.getElementById('quickNotes').value = '';
+    
+    const availableStockDiv = document.getElementById('quickAvailableStock');
+    availableStockDiv.style.display = 'block';
+    availableStockDiv.querySelector('span').textContent = currentStock;
     
     new bootstrap.Modal(document.getElementById('quickStockModal')).show();
 }
@@ -469,26 +632,26 @@ function quickStockOut(productId) {
 function processQuickStock() {
     const productId = document.getElementById('quickProductId').value;
     const stockType = document.getElementById('quickStockType').value;
-    const quantity = document.getElementById('quickQuantity').value;
+    const quantity = parseInt(document.getElementById('quickQuantity').value);
     const notes = document.getElementById('quickNotes').value;
     
     if (!quantity || quantity <= 0) {
-        alert('Please enter a valid quantity');
+        showToast('Please enter a valid quantity', 'danger');
         return;
     }
     
     const data = {
         product_id: productId,
         transaction_type: stockType,
-        quantity: stockType === 'out' ? -parseInt(quantity) : parseInt(quantity),
-        notes: notes
+        quantity: quantity,
+        notes: notes || `Quick ${stockType === 'in' ? 'stock in' : 'stock out'}`
     };
     
-    fetch('#', {
+    fetch('{% url "update_inventory" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
+            'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(data)
     })
@@ -496,40 +659,41 @@ function processQuickStock() {
     .then(data => {
         if (data.success) {
             showToast('Stock updated successfully!', 'success');
-            location.reload();
+            updateProductRow(productId, data.new_stock, data.is_low_stock);
+            bootstrap.Modal.getInstance(document.getElementById('quickStockModal')).hide();
+            updateStockCounts();
         } else {
             showToast(data.error || 'Failed to update stock', 'danger');
         }
     })
     .catch(error => {
+        console.error('Error:', error);
         showToast('An error occurred', 'danger');
     });
-    
-    bootstrap.Modal.getInstance(document.getElementById('quickStockModal')).hide();
 }
 
 function processStockIn() {
     const productId = document.getElementById('stockInProduct').value;
-    const quantity = document.getElementById('stockInQuantity').value;
+    const quantity = parseInt(document.getElementById('stockInQuantity').value);
     const notes = document.getElementById('stockInNotes').value;
     
     if (!productId || !quantity) {
-        alert('Please fill in all required fields');
+        showToast('Please fill in all required fields', 'danger');
         return;
     }
     
     const data = {
         product_id: productId,
         transaction_type: 'in',
-        quantity: parseInt(quantity),
-        notes: notes
+        quantity: quantity,
+        notes: notes || 'Stock in'
     };
     
-    fetch('#', {
+    fetch('{% url "update_inventory" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
+            'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(data)
     })
@@ -537,38 +701,43 @@ function processStockIn() {
     .then(data => {
         if (data.success) {
             showToast('Stock added successfully!', 'success');
-            location.reload();
+            updateProductRow(productId, data.new_stock, data.is_low_stock);
+            bootstrap.Modal.getInstance(document.getElementById('stockInModal')).hide();
+            document.getElementById('stockInForm').reset();
+            updateStockCounts();
         } else {
             showToast(data.error || 'Failed to add stock', 'danger');
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred', 'danger');
     });
-    
-    bootstrap.Modal.getInstance(document.getElementById('stockInModal')).hide();
 }
 
 function processStockOut() {
     const productId = document.getElementById('stockOutProduct').value;
-    const quantity = document.getElementById('stockOutQuantity').value;
+    const quantity = parseInt(document.getElementById('stockOutQuantity').value);
     const reason = document.getElementById('stockOutReason').value;
     const notes = document.getElementById('stockOutNotes').value;
     
     if (!productId || !quantity || !reason) {
-        alert('Please fill in all required fields');
+        showToast('Please fill in all required fields', 'danger');
         return;
     }
     
     const data = {
         product_id: productId,
         transaction_type: 'out',
-        quantity: -parseInt(quantity),
-        notes: `${reason}: ${notes}`
+        quantity: quantity,
+        notes: `${reason}: ${notes}`.trim()
     };
     
-    fetch('#', {
+    fetch('{% url "update_inventory" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
+            'X-CSRFToken': csrfToken
         },
         body: JSON.stringify(data)
     })
@@ -576,20 +745,150 @@ function processStockOut() {
     .then(data => {
         if (data.success) {
             showToast('Stock removed successfully!', 'success');
-            location.reload();
+            updateProductRow(productId, data.new_stock, data.is_low_stock);
+            bootstrap.Modal.getInstance(document.getElementById('stockOutModal')).hide();
+            document.getElementById('stockOutForm').reset();
+            updateStockCounts();
         } else {
             showToast(data.error || 'Failed to remove stock', 'danger');
         }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('An error occurred', 'danger');
     });
-    
-    bootstrap.Modal.getInstance(document.getElementById('stockOutModal')).hide();
 }
 
 function viewProductHistory(productId) {
-    window.location.href = `#`.replace('0', productId);
+    const modal = new bootstrap.Modal(document.getElementById('productHistoryModal'));
+    modal.show();
+    
+    // Reset content
+    document.getElementById('productHistoryContent').innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    `;
+    
+    fetch(`{% url "product_history" 0 %}`.replace('0', productId))
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let historyHtml = `
+                <div class="mb-3">
+                    <h6 class="fw-bold">${data.product_name}</h6>
+                    <p class="text-muted mb-0">Current Stock: <span class="fw-bold">${data.current_stock}</span></p>
+                </div>
+            `;
+            
+            if (data.history.length > 0) {
+                historyHtml += `
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Quantity</th>
+                                    <th>Notes</th>
+                                    <th>User</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                data.history.forEach(record => {
+                    const quantityClass = record.quantity > 0 ? 'text-success' : 'text-danger';
+                    const quantitySign = record.quantity > 0 ? '+' : '';
+                    
+                    historyHtml += `
+                        <tr>
+                            <td>${record.date}</td>
+                            <td>${record.type}</td>
+                            <td class="${quantityClass}">${quantitySign}${record.quantity}</td>
+                            <td>${record.notes || '-'}</td>
+                            <td>${record.user}</td>
+                        </tr>
+                    `;
+                });
+                
+                historyHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                historyHtml += `
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-history fa-2x mb-2"></i>
+                        <p>No history records found</p>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('productHistoryContent').innerHTML = historyHtml;
+        } else {
+            document.getElementById('productHistoryContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    ${data.error || 'Failed to load history'}
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('productHistoryContent').innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                An error occurred while loading history
+            </div>
+        `;
+    });
 }
 
-// Update available stock when product is selected
+function updateProductRow(productId, newStock, isLowStock) {
+    const row = document.querySelector(`tr[data-product-id="${productId}"]`);
+    if (!row) return;
+    
+    // Update stock quantity
+    const stockElement = row.querySelector('.stock-quantity');
+    stockElement.textContent = newStock;
+    
+    // Update stock quantity styling
+    stockElement.className = 'fw-bold stock-quantity';
+    if (newStock === 0) {
+        stockElement.classList.add('text-danger');
+    } else if (isLowStock) {
+        stockElement.classList.add('text-warning');
+    } else {
+        stockElement.classList.add('text-success');
+    }
+    
+    // Update status badge
+    const statusElement = row.querySelector('.stock-status');
+    statusElement.className = 'stock-status badge';
+    if (newStock === 0) {
+        statusElement.classList.add('bg-danger');
+        statusElement.textContent = 'Out of Stock';
+    } else if (isLowStock) {
+        statusElement.classList.add('bg-warning');
+        statusElement.textContent = 'Low Stock';
+    } else {
+        statusElement.classList.add('bg-success');
+        statusElement.textContent = 'In Stock';
+    }
+    
+    // Update stock value (assuming cost price calculation)
+    const costPriceText = row.querySelector('td:nth-child(7)').textContent;
+    const costPrice = parseFloat(costPriceText.replace('KES ', '')) || 0;
+    const stockValue = newStock * costPrice;
+    row.querySelector('.stock-value').textContent = `KES ${stockValue.toFixed(2)}`;
+}
+
+// Update available stock when product is selected in stock out modal
 document.getElementById('stockOutProduct').addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
     const availableStock = selectedOption.dataset.stock || 0;
@@ -597,17 +896,78 @@ document.getElementById('stockOutProduct').addEventListener('change', function()
     document.getElementById('stockOutQuantity').max = availableStock;
 });
 
-// Search on enter
+// Search on enter key
 document.getElementById('inventorySearch').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
         searchInventory();
     }
 });
 
-// Toast notification function
-function showToast(message, type) {
-    // Implement your toast notification here
-    alert(message); // Temporary implementation
+// Toast notification functions
+function showToast(message, type = 'info') {
+    // Create toast container if it doesn't exist
+    let toastContainer = document.querySelector('.toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '1055';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Create toast element
+    const toastId = 'toast-' + Date.now();
+    const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type}" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-${getToastIcon(type)} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    
+    // Show toast
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
+    toast.show();
+    
+    // Remove toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
 }
+
+function showLoadingToast(message) {
+    showToast(`<div class="spinner-border spinner-border-sm me-2" role="status"></div>${message}`, 'primary');
+}
+
+function getToastIcon(type) {
+    const icons = {
+        'success': 'check-circle',
+        'danger': 'exclamation-triangle',
+        'warning': 'exclamation-triangle',
+        'info': 'info-circle',
+        'primary': 'info-circle'
+    };
+    return icons[type] || 'info-circle';
+}
+
+// Clear form when modals are hidden
+document.getElementById('addProductModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('addProductForm').reset();
+});
+
+document.getElementById('stockInModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('stockInForm').reset();
+});
+
+document.getElementById('stockOutModal').addEventListener('hidden.bs.modal', function() {
+    document.getElementById('stockOutForm').reset();
+    document.getElementById('availableStock').textContent = '0';
+});
 </script>
 {% endblock %}

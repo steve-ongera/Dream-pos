@@ -27,4 +27,10 @@ urlpatterns = [
     path('reports/daily-analysis/', views.daily_sales_analysis_ajax, name='daily_sales_analysis_ajax'),
     path('reports/sales-summary/', views.sales_summary_ajax, name='sales_summary_ajax'),
     path('settings/', views.settings_view, name='settings_view'),
+
+    # AJAX endpoints
+    path('update/', views.update_inventory, name='update_inventory'),
+    path('export/', views.export_inventory, name='export_inventory'),
+    path('add-product/', views.add_product, name='add_product'),
+    path('product-history/<int:product_id>/', views.get_product_history, name='product_history'),
 ]

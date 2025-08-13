@@ -9,7 +9,10 @@ import json
 from datetime import datetime, timedelta
 from django.db import models
 from .models import Product, Category, Sale, SaleItem, Customer, Discount, Inventory
-
+from django.views.decorators.http import require_http_methods
+from django.http import HttpResponse
+from openpyxl import Workbook
+from io import BytesIO
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
@@ -17,6 +20,15 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_protect
 from django.http import JsonResponse
 import json
+from django.http import HttpResponse
+from openpyxl import Workbook
+from io import BytesIO
+from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
+from io import BytesIO
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+
 
 @csrf_protect
 def login_view(request):
@@ -354,6 +366,246 @@ def inventory_management(request):
     
     return render(request, 'inventory.html', context)
 
+@login_required
+@require_http_methods(["POST"])
+def update_inventory(request):
+    """AJAX view to update inventory stock"""
+    try:
+        data = json.loads(request.body)
+        product_id = data.get('product_id')
+        transaction_type = data.get('transaction_type')
+        quantity = int(data.get('quantity', 0))
+        notes = data.get('notes', '')
+        
+        product = get_object_or_404(Product, id=product_id, is_active=True)
+        
+        # Validate stock out doesn't exceed available stock
+        if transaction_type == 'out' and abs(quantity) > product.stock_quantity:
+            return JsonResponse({
+                'success': False,
+                'error': f'Insufficient stock. Available: {product.stock_quantity}'
+            })
+        
+        # Update product stock
+        if transaction_type == 'in':
+            product.stock_quantity += abs(quantity)
+            inventory_quantity = abs(quantity)
+        else:  # out
+            product.stock_quantity -= abs(quantity)
+            inventory_quantity = -abs(quantity)
+        
+        product.save()
+        
+        # Create inventory transaction record
+        Inventory.objects.create(
+            product=product,
+            transaction_type=transaction_type,
+            quantity=inventory_quantity,
+            notes=notes,
+            user=request.user
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Inventory updated successfully',
+            'new_stock': product.stock_quantity,
+            'is_low_stock': product.is_low_stock
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+@login_required
+def export_inventory(request):
+    """Export inventory to Excel"""
+    try:
+        # Create workbook and worksheet
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Inventory Report"
+        
+        # Define headers
+        headers = [
+            'SKU', 'Product Name', 'Category', 'Current Stock', 
+            'Min Level', 'Unit Price', 'Cost Price', 'Stock Value', 'Status'
+        ]
+        
+        # Style headers
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Add headers
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+        
+        # Get products data
+        products = Product.objects.select_related('category').filter(is_active=True).order_by('name')
+        
+        # Add data rows
+        for row, product in enumerate(products, 2):
+            stock_value = product.stock_quantity * product.cost_price
+            
+            # Determine status
+            if product.stock_quantity == 0:
+                status = "Out of Stock"
+            elif product.is_low_stock:
+                status = "Low Stock"
+            else:
+                status = "In Stock"
+            
+            row_data = [
+                product.sku,
+                product.name,
+                product.category.name,
+                product.stock_quantity,
+                product.min_stock_level,
+                float(product.price),
+                float(product.cost_price),
+                float(stock_value),
+                status
+            ]
+            
+            for col, value in enumerate(row_data, 1):
+                ws.cell(row=row, column=col, value=value)
+        
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save to BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # Create response
+        response = HttpResponse(
+            output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="inventory_report_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+        
+        return response
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Export failed: {str(e)}'
+        })
+
+@login_required
+@require_http_methods(["POST"])
+def add_product(request):
+    """AJAX view to add new product"""
+    try:
+        data = json.loads(request.body)
+        
+        # Validate required fields
+        required_fields = ['name', 'category_id', 'sku', 'price']
+        for field in required_fields:
+            if not data.get(field):
+                return JsonResponse({
+                    'success': False,
+                    'error': f'{field.replace("_", " ").title()} is required'
+                })
+        
+        # Check if SKU already exists
+        if Product.objects.filter(sku=data['sku']).exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'SKU already exists'
+            })
+        
+        # Get category
+        try:
+            category = Category.objects.get(id=data['category_id'])
+        except Category.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid category'
+            })
+        
+        # Create product
+        product = Product.objects.create(
+            name=data['name'],
+            category=category,
+            sku=data['sku'],
+            description=data.get('description', ''),
+            price=data['price'],
+            cost_price=data.get('cost_price', 0),
+            stock_quantity=data.get('stock_quantity', 0),
+            min_stock_level=data.get('min_stock_level', 5),
+            is_active=True
+        )
+        
+        # If initial stock is added, create inventory record
+        if product.stock_quantity > 0:
+            Inventory.objects.create(
+                product=product,
+                transaction_type='in',
+                quantity=product.stock_quantity,
+                notes='Initial stock',
+                user=request.user
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Product added successfully',
+            'product_id': product.id,
+            'product_name': product.name
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+@login_required
+def get_product_history(request, product_id):
+    """Get inventory history for a specific product"""
+    try:
+        product = get_object_or_404(Product, id=product_id)
+        
+        history = Inventory.objects.filter(product=product).select_related('user').order_by('-created_at')[:50]
+        
+        history_data = []
+        for record in history:
+            history_data.append({
+                'date': record.created_at.strftime('%Y-%m-%d %H:%M'),
+                'type': record.get_transaction_type_display(),
+                'quantity': record.quantity,
+                'notes': record.notes,
+                'user': record.user.username if record.user else 'System'
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'product_name': product.name,
+            'current_stock': product.stock_quantity,
+            'history': history_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
