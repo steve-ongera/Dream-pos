@@ -83,68 +83,16 @@ class Payment(models.Model):
         ('CANCELLED', 'Cancelled'),
     ]
     
-    sale = models.ForeignKey(
-        'Sale', 
-        on_delete=models.CASCADE, 
-        related_name='payments',
-        help_text="Related sale transaction"
-    )
-    
-    checkout_request_id = models.CharField(
-        max_length=100, 
-        unique=True,
-        help_text="M-Pesa checkout request ID"
-    )
-    
-    status = models.CharField(
-        max_length=20, 
-        choices=PAYMENT_STATUS_CHOICES, 
-        default='PENDING',
-        help_text="Payment status"
-    )
-    
-    phone_number = models.CharField(
-        max_length=15, 
-        blank=True, 
-        null=True,
-        help_text="Customer phone number used for payment"
-    )
-    
-    amount = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2,
-        help_text="Payment amount"
-    )
-    
-    mpesa_receipt = models.CharField(
-        max_length=50, 
-        blank=True, 
-        null=True,
-        help_text="M-Pesa transaction receipt number"
-    )
-    
-    transaction_date = models.CharField(
-        max_length=50, 
-        blank=True, 
-        null=True,
-        help_text="M-Pesa transaction date"
-    )
-    
-    raw_response = models.JSONField(
-        blank=True, 
-        null=True,
-        help_text="Full M-Pesa API response"
-    )
-    
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When payment record was created"
-    )
-    
-    updated_at = models.DateTimeField(
-        auto_now=True,
-        help_text="When payment record was last updated"
-    )
+    sale = models.ForeignKey('Sale', on_delete=models.CASCADE, related_name='payments',help_text="Related sale transaction")
+    checkout_request_id = models.CharField(max_length=100, unique=True,help_text="M-Pesa checkout request ID") 
+    status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING',help_text="Payment status")
+    phone_number = models.CharField(max_length=15, blank=True, null=True,help_text="Customer phone number used for payment")
+    amount = models.DecimalField(max_digits=10, decimal_places=2,help_text="Payment amount")
+    mpesa_receipt = models.CharField(max_length=50, blank=True, null=True,help_text="M-Pesa transaction receipt number")
+    transaction_date = models.CharField(max_length=50, blank=True, null=True,help_text="M-Pesa transaction date")
+    raw_response = models.JSONField(blank=True, null=True,help_text="Full M-Pesa API response")
+    created_at = models.DateTimeField(auto_now_add=True,help_text="When payment record was created")
+    updated_at = models.DateTimeField(auto_now=True,help_text="When payment record was last updated")
     
     class Meta:
         db_table = 'pos_payments'
@@ -197,8 +145,15 @@ class Sale(models.Model):
         ('mobile', 'Mobile Money'),
         ('credit', 'Credit'),
     ]
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
     
     sale_number = models.CharField(max_length=20, unique=True)
+    status = models.CharField(max_length=20,choices=STATUS_CHOICES,default='completed',help_text="Sale status")
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True)
     cashier = models.ForeignKey(User, on_delete=models.CASCADE)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
