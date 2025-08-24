@@ -66,6 +66,129 @@ class Customer(models.Model):
     def discount_percentage(self):
         discounts = {'bronze': 0, 'silver': 5, 'gold': 10, 'platinum': 15}
         return discounts.get(self.loyalty_tier, 0)
+    
+
+
+from django.db import models
+from django.contrib.auth.models import User
+import json
+
+class Payment(models.Model):
+    """Model to track M-Pesa payments for POS sales"""
+    
+    PAYMENT_STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    
+    sale = models.ForeignKey(
+        'Sale', 
+        on_delete=models.CASCADE, 
+        related_name='payments',
+        help_text="Related sale transaction"
+    )
+    
+    checkout_request_id = models.CharField(
+        max_length=100, 
+        unique=True,
+        help_text="M-Pesa checkout request ID"
+    )
+    
+    status = models.CharField(
+        max_length=20, 
+        choices=PAYMENT_STATUS_CHOICES, 
+        default='PENDING',
+        help_text="Payment status"
+    )
+    
+    phone_number = models.CharField(
+        max_length=15, 
+        blank=True, 
+        null=True,
+        help_text="Customer phone number used for payment"
+    )
+    
+    amount = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        help_text="Payment amount"
+    )
+    
+    mpesa_receipt = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        help_text="M-Pesa transaction receipt number"
+    )
+    
+    transaction_date = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True,
+        help_text="M-Pesa transaction date"
+    )
+    
+    raw_response = models.JSONField(
+        blank=True, 
+        null=True,
+        help_text="Full M-Pesa API response"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When payment record was created"
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When payment record was last updated"
+    )
+    
+    class Meta:
+        db_table = 'pos_payments'
+        verbose_name = 'Payment'
+        verbose_name_plural = 'Payments'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['checkout_request_id']),
+            models.Index(fields=['status']),
+            models.Index(fields=['sale']),
+        ]
+    
+    def __str__(self):
+        return f"Payment {self.checkout_request_id} - {self.status}"
+    
+    @property
+    def is_successful(self):
+        """Check if payment was successful"""
+        return self.status == 'SUCCESS'
+    
+    @property
+    def is_pending(self):
+        """Check if payment is still pending"""
+        return self.status == 'PENDING'
+    
+    @property
+    def formatted_phone(self):
+        """Return formatted phone number"""
+        if self.phone_number:
+            if self.phone_number.startswith('254'):
+                return f"+{self.phone_number}"
+            return self.phone_number
+        return None
+    
+    def get_response_data(self):
+        """Get parsed response data"""
+        if self.raw_response:
+            if isinstance(self.raw_response, str):
+                try:
+                    return json.loads(self.raw_response)
+                except json.JSONDecodeError:
+                    return {}
+            return self.raw_response
+        return {}
 
 class Sale(models.Model):
     PAYMENT_METHODS = [
