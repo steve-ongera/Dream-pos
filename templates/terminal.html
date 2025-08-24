@@ -191,11 +191,21 @@
                             <i class="fas fa-credit-card me-1"></i>Card
                         </label>
                         
-                        <input type="radio" class="btn-check" name="paymentMethod" id="mobile" value="mobile">
-                        <label class="btn btn-outline-primary" for="mobile">
-                            <i class="fas fa-mobile-alt me-1"></i>Mobile
+                        <input type="radio" class="btn-check" name="paymentMethod" id="mpesa" value="mpesa">
+                        <label class="btn btn-outline-success" for="mpesa">
+                            <i class="fas fa-mobile-alt me-1"></i>M-Pesa
                         </label>
                     </div>
+                </div>
+                
+                <!-- M-Pesa Phone Number -->
+                <div class="mb-3" id="mpesaPhoneSection" style="display: none;">
+                    <label class="form-label fw-semibold">M-Pesa Phone Number</label>
+                    <div class="input-group">
+                        <span class="input-group-text">+254</span>
+                        <input type="tel" class="form-control" id="mpesaPhone" placeholder="712345678" pattern="[0-9]{9}">
+                    </div>
+                    <small class="text-muted">Enter phone number without country code</small>
                 </div>
                 
                 <!-- Amount Paid (for cash) -->
@@ -292,6 +302,11 @@
                                     <strong>Change: KES <span id="paymentChange">0.00</span></strong>
                                 </div>
                             </div>
+                            <div id="mpesaDisplay" style="display: none;">
+                                <div class="alert alert-info mb-0">
+                                    <strong>Phone: <span id="paymentMpesaPhone"></span></strong>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -300,6 +315,40 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-success btn-lg" onclick="confirmPayment()">
                     <i class="fas fa-check me-2"></i>Confirm Payment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- M-Pesa Payment Status Modal -->
+<div class="modal fade" id="mpesaStatusModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-mobile-alt me-2"></i>M-Pesa Payment
+                </h5>
+            </div>
+            <div class="modal-body text-center">
+                <div id="mpesaLoader" class="mb-4">
+                    <div class="spinner-border text-success" role="status" style="width: 4rem; height: 4rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+                <h5 id="mpesaStatusTitle">Sending STK Push...</h5>
+                <p id="mpesaStatusMessage" class="text-muted">Please check your phone and enter your M-Pesa PIN</p>
+                <div class="mt-4">
+                    <div class="bg-light p-3 rounded">
+                        <strong>Sale: <span id="mpesaSaleNumber"></span></strong><br>
+                        <strong>Amount: KES <span id="mpesaAmount"></span></strong><br>
+                        <strong>Phone: <span id="mpesaPhoneDisplay"></span></strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-outline-danger" onclick="cancelMpesaPayment()">
+                    Cancel Payment
                 </button>
             </div>
         </div>
@@ -326,10 +375,196 @@
                 <button type="button" class="btn btn-primary" onclick="printReceipt()">
                     <i class="fas fa-print me-2"></i>Print Receipt
                 </button>
+                <button type="button" class="btn btn-success" onclick="newSale()">
+                    <i class="fas fa-plus me-2"></i>New Sale
+                </button>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Pending M-Pesa Payments Alert -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+    <div id="pendingPaymentsAlert" class="alert alert-warning alert-dismissible" style="display: none;">
+        <strong><i class="fas fa-clock me-2"></i>Pending M-Pesa Payments</strong>
+        <div id="pendingPaymentsList"></div>
+        <button type="button" class="btn-close" onclick="dismissPendingAlert()"></button>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.product-card {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.product-card:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    transform: translateY(-2px);
+}
+
+.product-image {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.product-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.product-category {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 4px;
+}
+
+.product-price {
+    font-weight: 700;
+    color: #0d6efd;
+    font-size: 0.9rem;
+}
+
+.order-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.order-header {
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px 12px 0 0;
+}
+
+.cart-item {
+    transition: all 0.2s ease;
+}
+
+.cart-item:hover {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+.quantity-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.qty-btn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #dee2e6;
+    background: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.qty-btn:hover {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.qty-input {
+    width: 50px;
+    text-align: center;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+.btn-primary-custom {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    border: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.btn-primary-custom:hover {
+    background: linear-gradient(135deg, #218838 0%, #1e7e69 100%);
+    transform: translateY(-1px);
+}
+
+.category-filter.active {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.search-bar {
+    border-radius: 25px;
+    padding: 12px 20px;
+    border: 2px solid #e9ecef;
+    font-size: 1.1rem;
+}
+
+.search-bar:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.receipt {
+    font-family: 'Courier New', monospace;
+    line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+    .order-section {
+        position: static !important;
+        margin-top: 20px;
+    }
+}
+
+/* M-Pesa specific styles */
+.mpesa-status-success {
+    color: #28a745;
+}
+
+.mpesa-status-failed {
+    color: #dc3545;
+}
+
+.mpesa-status-pending {
+    color: #ffc107;
+}
+
+.pending-payment-item {
+    font-size: 0.85rem;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+
+.pending-payment-item:last-child {
+    border-bottom: none;
+}
+</style>
 {% endblock %}
 
 {% block extra_js %}
@@ -338,6 +573,8 @@
 let cart = [];
 let currentCustomer = null;
 let selectedDiscount = null;
+let paymentStatusInterval = null;
+let currentCheckoutRequestId = null;
 
 function addToCart(productId, productName, price, stock) {
     const existingItem = cart.find(item => item.productId === productId);
@@ -533,13 +770,25 @@ function processPayment() {
         return;
     }
     
-    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
     const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
-    const amountPaid = parseFloat(document.getElementById('amountPaid').value) || total;
+    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
     
-    if (paymentMethod === 'cash' && amountPaid < total) {
-        showToast('Amount paid is less than total', 'warning');
-        return;
+    // Validation based on payment method
+    if (paymentMethod === 'cash') {
+        const amountPaid = parseFloat(document.getElementById('amountPaid').value) || 0;
+        if (amountPaid < total) {
+            showToast('Amount paid is less than total', 'warning');
+            return;
+        }
+    } else if (paymentMethod === 'mpesa') {
+        const phoneInput = document.getElementById('mpesaPhone');
+        const phone = phoneInput.value.trim();
+        
+        if (!phone || phone.length !== 9 || !/^\d{9}$/.test(phone)) {
+            showToast('Please enter a valid 9-digit phone number', 'warning');
+            phoneInput.focus();
+            return;
+        }
     }
     
     // Show payment confirmation modal
@@ -568,8 +817,17 @@ function updatePaymentModal() {
     orderSummary.innerHTML = summaryHTML;
     
     const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
-    document.getElementById('paymentMethodDisplay').textContent = 
-        paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
+    const methodDisplay = {
+        'cash': 'Cash',
+        'card': 'Card',
+        'mpesa': 'M-Pesa'
+    };
+    
+    document.getElementById('paymentMethodDisplay').textContent = methodDisplay[paymentMethod];
+    
+    // Hide all payment-specific displays
+    document.getElementById('changeDisplay').style.display = 'none';
+    document.getElementById('mpesaDisplay').style.display = 'none';
     
     if (paymentMethod === 'cash') {
         const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
@@ -579,15 +837,27 @@ function updatePaymentModal() {
         if (change > 0) {
             document.getElementById('paymentChange').textContent = change.toFixed(2);
             document.getElementById('changeDisplay').style.display = 'block';
-        } else {
-            document.getElementById('changeDisplay').style.display = 'none';
         }
-    } else {
-        document.getElementById('changeDisplay').style.display = 'none';
+    } else if (paymentMethod === 'mpesa') {
+        const phone = document.getElementById('mpesaPhone').value;
+        document.getElementById('paymentMpesaPhone').textContent = `+254${phone}`;
+        document.getElementById('mpesaDisplay').style.display = 'block';
     }
 }
 
 function confirmPayment() {
+    const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
+    const total = parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', ''));
+    
+    let amountPaid = total;
+    let phoneNumber = '';
+    
+    if (paymentMethod === 'cash') {
+        amountPaid = parseFloat(document.getElementById('amountPaid').value) || total;
+    } else if (paymentMethod === 'mpesa') {
+        phoneNumber = '254' + document.getElementById('mpesaPhone').value;
+    }
+    
     const paymentData = {
         items: cart.map(item => ({
             product_id: item.productId,
@@ -595,65 +865,210 @@ function confirmPayment() {
             unit_price: item.price
         })),
         customer_id: currentCustomer ? currentCustomer.id : null,
-        payment_method: document.querySelector('input[name="paymentMethod"]:checked').value,
-        amount_paid: parseFloat(document.getElementById('amountPaid').value) || 
-                    parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', '')),
+        payment_method: paymentMethod,
+        amount_paid: amountPaid,
+        phone_number: phoneNumber,
         discount_id: selectedDiscount ? selectedDiscount.id : null
     };
+    
+    // Hide payment modal
+    bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+    
+    // Show loading for M-Pesa
+    if (paymentMethod === 'mpesa') {
+        showMpesaStatusModal();
+    }
     
     fetch('{% url "process_sale" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': csrftoken
+            'X-CSRFToken': getCookie('csrftoken')
         },
         body: JSON.stringify(paymentData)
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Hide payment modal
-            bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
-            
-            // Show receipt
-            showReceipt(data);
-            
-            // Clear cart
-            cart = [];
-            currentCustomer = null;
-            selectedDiscount = null;
-            updateCartDisplay();
-            resetForm();
-            
-            showToast('Payment processed successfully!', 'success');
+            if (data.payment_pending) {
+                // M-Pesa payment initiated
+                currentCheckoutRequestId = data.checkout_request_id;
+                updateMpesaStatusModal(data);
+                startPaymentStatusPolling();
+            } else {
+                // Payment completed immediately (cash/card)
+                showReceipt(data);
+                clearCartAfterSale();
+                showToast('Payment processed successfully!', 'success');
+            }
         } else {
+            hideMpesaStatusModal();
             showToast(data.error || 'Payment failed', 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
+        hideMpesaStatusModal();
         showToast('An error occurred while processing payment', 'danger');
     });
 }
 
+function showMpesaStatusModal() {
+    const modal = new bootstrap.Modal(document.getElementById('mpesaStatusModal'));
+    modal.show();
+    
+    // Reset modal content
+    document.getElementById('mpesaStatusTitle').textContent = 'Sending STK Push...';
+    document.getElementById('mpesaStatusMessage').textContent = 'Please check your phone and enter your M-Pesa PIN';
+    document.getElementById('mpesaLoader').style.display = 'block';
+}
+
+function updateMpesaStatusModal(data) {
+    document.getElementById('mpesaSaleNumber').textContent = data.sale_number;
+    document.getElementById('mpesaAmount').textContent = data.total.toFixed(2);
+    document.getElementById('mpesaPhoneDisplay').textContent = '+254' + document.getElementById('mpesaPhone').value;
+    
+    document.getElementById('mpesaStatusTitle').textContent = 'STK Push Sent';
+    document.getElementById('mpesaStatusMessage').textContent = data.message;
+}
+
+function hideMpesaStatusModal() {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('mpesaStatusModal'));
+    if (modal) {
+        modal.hide();
+    }
+    stopPaymentStatusPolling();
+}
+
+function startPaymentStatusPolling() {
+    if (paymentStatusInterval) {
+        clearInterval(paymentStatusInterval);
+    }
+    
+    paymentStatusInterval = setInterval(() => {
+        if (currentCheckoutRequestId) {
+            checkMpesaPaymentStatus();
+        }
+    }, 3000); // Check every 3 seconds
+    
+    // Stop polling after 5 minutes
+    setTimeout(() => {
+        stopPaymentStatusPolling();
+        if (document.getElementById('mpesaStatusModal').classList.contains('show')) {
+            updateMpesaStatusModal({
+                status: 'TIMEOUT',
+                message: 'Payment request timed out. Please try again.'
+            });
+        }
+    }, 300000); // 5 minutes
+}
+
+function stopPaymentStatusPolling() {
+    if (paymentStatusInterval) {
+        clearInterval(paymentStatusInterval);
+        paymentStatusInterval = null;
+    }
+    currentCheckoutRequestId = null;
+}
+
+function checkMpesaPaymentStatus() {
+    if (!currentCheckoutRequestId) return;
+    
+    fetch(`{% url "check_payment_status" %}?checkout_request_id=${currentCheckoutRequestId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'SUCCESS') {
+                stopPaymentStatusPolling();
+                
+                // Update modal to show success
+                document.getElementById('mpesaStatusTitle').textContent = 'Payment Successful!';
+                document.getElementById('mpesaStatusMessage').textContent = `Payment received. Receipt: ${data.mpesa_receipt || 'N/A'}`;
+                document.getElementById('mpesaLoader').innerHTML = '<i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>';
+                
+                setTimeout(() => {
+                    hideMpesaStatusModal();
+                    showReceipt({
+                        success: true,
+                        sale_number: data.sale_number,
+                        total: parseFloat(document.getElementById('totalAmount').textContent.replace('KES ', '')),
+                        change: 0,
+                        payment_method: 'mpesa',
+                        mpesa_receipt: data.mpesa_receipt
+                    });
+                    clearCartAfterSale();
+                    showToast('M-Pesa payment successful!', 'success');
+                }, 2000);
+                
+            } else if (data.status === 'FAILED') {
+                stopPaymentStatusPolling();
+                
+                // Update modal to show failure
+                document.getElementById('mpesaStatusTitle').textContent = 'Payment Failed';
+                document.getElementById('mpesaStatusMessage').textContent = data.message || 'Payment was cancelled or failed';
+                document.getElementById('mpesaLoader').innerHTML = '<i class="fas fa-times-circle text-danger" style="font-size: 4rem;"></i>';
+                
+                setTimeout(() => {
+                    hideMpesaStatusModal();
+                    showToast('M-Pesa payment failed', 'danger');
+                }, 3000);
+                
+            } else if (data.status === 'PENDING') {
+                // Update message but keep polling
+                document.getElementById('mpesaStatusMessage').textContent = data.message || 'Waiting for payment confirmation...';
+            }
+        })
+        .catch(error => {
+            console.error('Error checking payment status:', error);
+        });
+}
+
+function cancelMpesaPayment() {
+    stopPaymentStatusPolling();
+    hideMpesaStatusModal();
+    showToast('M-Pesa payment cancelled', 'info');
+}
+
 function showReceipt(saleData) {
     const receiptContent = document.getElementById('receiptContent');
+    const currentDate = new Date().toLocaleString();
+    const paymentMethod = saleData.payment_method || 'cash';
+    
     receiptContent.innerHTML = `
         <div class="receipt">
-            <h4 class="fw-bold">Dreams Store</h4>
+            <h4 class="fw-bold">Dreams POS</h4>
             <p class="mb-1">Thank you for your purchase!</p>
             <hr>
             <div class="text-start">
                 <p><strong>Sale #:</strong> ${saleData.sale_number}</p>
-                <p><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+                <p><strong>Date:</strong> ${currentDate}</p>
                 <p><strong>Cashier:</strong> {{ user.get_full_name|default:user.username }}</p>
                 ${currentCustomer ? `<p><strong>Customer:</strong> ${currentCustomer.name}</p>` : ''}
+                <p><strong>Payment:</strong> ${paymentMethod.toUpperCase()}</p>
+                ${saleData.mpesa_receipt ? `<p><strong>M-Pesa Receipt:</strong> ${saleData.mpesa_receipt}</p>` : ''}
             </div>
             <hr>
             <div class="text-start">
-                <p><strong>Total:</strong> KES ${saleData.total}</p>
-                ${saleData.change > 0 ? `<p><strong>Change:</strong> KES ${saleData.change}</p>` : ''}
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody>
+                            ${cart.map(item => `
+                                <tr>
+                                    <td>${item.name}</td>
+                                    <td>${item.quantity}x</td>
+                                    <td>KES ${(item.quantity * item.price).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
+            <hr>
+            <div class="text-start">
+                <p><strong>Total:</strong> KES ${saleData.total.toFixed(2)}</p>
+                ${saleData.change > 0 ? `<p><strong>Change:</strong> KES ${saleData.change.toFixed(2)}</p>` : ''}
+            </div>
+            <hr>
+            <p class="text-center small text-muted">Visit us again soon!</p>
         </div>
     `;
     
@@ -661,7 +1076,19 @@ function showReceipt(saleData) {
 }
 
 function printReceipt() {
+    const printContent = document.getElementById('receiptContent').innerHTML;
+    const originalContent = document.body.innerHTML;
+    
+    document.body.innerHTML = printContent;
     window.print();
+    document.body.innerHTML = originalContent;
+    location.reload(); // Reload to restore page functionality
+}
+
+function newSale() {
+    bootstrap.Modal.getInstance(document.getElementById('receiptModal')).hide();
+    // Cart already cleared, just reset form elements
+    resetForm();
 }
 
 function clearCart() {
@@ -675,20 +1102,39 @@ function clearCart() {
     }
 }
 
+function clearCartAfterSale() {
+    cart = [];
+    updateCartDisplay();
+    resetForm();
+}
+
 function resetForm() {
     document.getElementById('customerSelect').value = '';
     document.getElementById('discountSelect').value = '';
     document.getElementById('amountPaid').value = '';
+    document.getElementById('mpesaPhone').value = '';
     document.getElementById('customerInfo').style.display = 'none';
     document.getElementById('discountInfo').style.display = 'none';
     document.getElementById('changeAmount').style.display = 'none';
+    
+    // Reset payment method to cash
+    document.getElementById('cash').checked = true;
+    document.getElementById('amountPaidSection').style.display = 'block';
+    document.getElementById('mpesaPhoneSection').style.display = 'none';
+    
     currentCustomer = null;
     selectedDiscount = null;
 }
 
 function searchProducts() {
     const query = document.getElementById('productSearch').value;
-    if (query.length < 2) return;
+    if (query.length < 2) {
+        // Show all products if query is too short
+        document.querySelectorAll('.product-item').forEach(item => {
+            item.style.display = 'block';
+        });
+        return;
+    }
     
     fetch(`{% url "search_products" %}?q=${encodeURIComponent(query)}`)
         .then(response => response.json())
@@ -716,6 +1162,7 @@ function updateProductsDisplay(products) {
     
     let productsHTML = '';
     products.forEach(product => {
+        const isLowStock = product.stock <= 5; // Assuming 5 is low stock threshold
         productsHTML += `
             <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
                 <div class="product-card h-100" onclick="addToCart(${product.id}, '${product.name}', ${product.price}, ${product.stock})">
@@ -729,6 +1176,7 @@ function updateProductsDisplay(products) {
                             <div class="product-price">KES ${product.price}</div>
                             <small class="text-muted">${product.stock} left</small>
                         </div>
+                        ${isLowStock ? '<div class="mt-1"><span class="badge bg-warning text-dark">Low Stock</span></div>' : ''}
                     </div>
                 </div>
             </div>
@@ -749,85 +1197,221 @@ function addNewCustomer() {
         return;
     }
     
-    // Here you would typically make an AJAX call to create the customer
-    // For now, we'll just simulate it
-    showToast('Customer added successfully', 'success');
-    bootstrap.Modal.getInstance(document.getElementById('customerModal')).hide();
+    const customerData = {
+        name: name,
+        email: email,
+        phone: phone,
+        address: address,
+        loyalty_tier: 'bronze'
+    };
     
-    // Reset form
-    document.getElementById('customerForm').reset();
+    fetch('{% url "customer_create_ajax" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(customerData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Customer added successfully', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('customerModal')).hide();
+            
+            // Add to customer select
+            const customerSelect = document.getElementById('customerSelect');
+            const option = new Option(`${data.data.name} (Bronze)`, data.data.id);
+            option.dataset.name = data.data.name;
+            option.dataset.tier = 'bronze';
+            option.dataset.points = '0';
+            customerSelect.add(option);
+            customerSelect.value = data.data.id;
+            selectCustomer();
+            
+            // Reset form
+            document.getElementById('customerForm').reset();
+        } else {
+            showToast(data.error || 'Failed to add customer', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Error adding customer', 'danger');
+    });
 }
 
-// Category filtering
-document.querySelectorAll('.category-filter').forEach(btn => {
-    btn.addEventListener('click', function() {
-        document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
-        this.classList.add('active');
-        
-        const categoryId = this.dataset.category;
-        
-        if (categoryId === 'all') {
-            document.querySelectorAll('.product-item').forEach(item => {
-                item.style.display = 'block';
-            });
-        } else {
-            document.querySelectorAll('.product-item').forEach(item => {
-                if (item.dataset.category === categoryId) {
-                    item.style.display = 'block';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
+// Utility functions
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
         }
-    });
-});
+    }
+    return cookieValue;
+}
 
-// Payment method change handler
-document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        const amountPaidSection = document.getElementById('amountPaidSection');
-        if (this.value === 'cash') {
-            amountPaidSection.style.display = 'block';
-        } else {
-            amountPaidSection.style.display = 'none';
-            document.getElementById('changeAmount').style.display = 'none';
-        }
-    });
-});
-
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    // F1 - New Sale
-    if (e.key === 'F1') {
-        e.preventDefault();
-        clearCart();
+function showToast(message, type = 'info') {
+    // Create toast element
+    const toastId = 'toast-' + Date.now();
+    const toastHTML = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+    
+    // Add to toast container or create one
+    let toastContainer = document.querySelector('.toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '1055';
+        document.body.appendChild(toastContainer);
     }
     
-    // F2 - Process Payment
-    if (e.key === 'F2') {
-        e.preventDefault();
-        if (cart.length > 0) {
-            processPayment();
-        }
-    }
+    toastContainer.insertAdjacentHTML('beforeend', toastHTML);
     
-    // Escape - Clear cart
-    if (e.key === 'Escape') {
-        e.preventDefault();
-        clearCart();
-    }
-});
+    // Show toast
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, {
+        autohide: true,
+        delay: type === 'danger' ? 5000 : 3000
+    });
+    toast.show();
+    
+    // Remove from DOM after hiding
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
 
-// Search on enter
-document.getElementById('productSearch').addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-        searchProducts();
-    }
-});
+// Check for pending M-Pesa payments
+function checkPendingMpesaPayments() {
+    fetch('{% url "get_pending_mpesa_sales" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.pending_sales && data.pending_sales.length > 0) {
+                showPendingPaymentsAlert(data.pending_sales);
+            }
+        })
+        .catch(error => {
+            console.error('Error checking pending payments:', error);
+        });
+}
 
-// Initialize
+function showPendingPaymentsAlert(pendingSales) {
+    const alert = document.getElementById('pendingPaymentsAlert');
+    const list = document.getElementById('pendingPaymentsList');
+    
+    let listHTML = '<small>';
+    pendingSales.forEach(sale => {
+        listHTML += `
+            <div class="pending-payment-item">
+                Sale ${sale.sale_number} - KES ${sale.total} (${sale.phone_number})
+            </div>
+        `;
+    });
+    listHTML += '</small>';
+    
+    list.innerHTML = listHTML;
+    alert.style.display = 'block';
+}
+
+function dismissPendingAlert() {
+    document.getElementById('pendingPaymentsAlert').style.display = 'none';
+}
+
+// Event Listeners
 document.addEventListener('DOMContentLoaded', function() {
     updateCartDisplay();
+    
+    // Check for pending payments every 30 seconds
+    checkPendingMpesaPayments();
+    setInterval(checkPendingMpesaPayments, 30000);
+    
+    // Payment method change handler
+    document.querySelectorAll('input[name="paymentMethod"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const amountPaidSection = document.getElementById('amountPaidSection');
+            const mpesaPhoneSection = document.getElementById('mpesaPhoneSection');
+            
+            if (this.value === 'cash') {
+                amountPaidSection.style.display = 'block';
+                mpesaPhoneSection.style.display = 'none';
+            } else if (this.value === 'mpesa') {
+                amountPaidSection.style.display = 'none';
+                mpesaPhoneSection.style.display = 'block';
+            } else {
+                amountPaidSection.style.display = 'none';
+                mpesaPhoneSection.style.display = 'none';
+            }
+            
+            document.getElementById('changeAmount').style.display = 'none';
+        });
+    });
+    
+    // Category filtering
+    document.querySelectorAll('.category-filter').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.category-filter').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            const categoryId = this.dataset.category;
+            
+            if (categoryId === 'all') {
+                document.querySelectorAll('.product-item').forEach(item => {
+                    item.style.display = 'block';
+                });
+            } else {
+                document.querySelectorAll('.product-item').forEach(item => {
+                    if (item.dataset.category === categoryId) {
+                        item.style.display = 'block';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            }
+        });
+    });
+    
+    // Search on enter
+    document.getElementById('productSearch').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            searchProducts();
+        }
+    });
+    
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+        // F1 - New Sale
+        if (e.key === 'F1') {
+            e.preventDefault();
+            clearCart();
+        }
+        
+        // F2 - Process Payment
+        if (e.key === 'F2') {
+            e.preventDefault();
+            if (cart.length > 0) {
+                processPayment();
+            }
+        }
+        
+        // Escape - Clear cart
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            clearCart();
+        }
+    });
 });
 </script>
 {% endblock %}

@@ -9,6 +9,13 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('terminal/', views.pos_terminal, name='terminal'),
     path('process-sale/', views.process_sale, name='process_sale'),
+
+    # M-Pesa Integration
+    path('mpesa/callback/', views.mpesa_callback, name='mpesa_callback'),
+    path('check-payment-status/', views.check_payment_status, name='check_payment_status'),
+    path('pending-mpesa-sales/', views.get_pending_mpesa_sales, name='get_pending_mpesa_sales'),
+
+    
     path('pos/products/category/<int:category_id>/', views.get_products_by_category, name='products_by_category'),
     path('products/search/', views.search_products, name='search_products'),
     path('sales/', views.sales_history, name='sales_history'),

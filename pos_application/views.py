@@ -124,22 +124,7 @@ def dashboard(request):
     
     return render(request, 'dashboard.html', context)
 
-@login_required
-def pos_terminal(request):
-    """POS Terminal for making sales"""
-    categories = Category.objects.all()
-    products = Product.objects.filter(is_active=True, stock_quantity__gt=0)
-    customers = Customer.objects.all()
-    discounts = Discount.objects.filter(is_active=True)
-    
-    context = {
-        'categories': categories,
-        'products': products,
-        'customers': customers,
-        'discounts': discounts,
-    }
-    
-    return render(request, 'terminal.html', context)
+
 
 @login_required
 def get_products_by_category(request, category_id):
@@ -161,6 +146,553 @@ def get_products_by_category(request, category_id):
         })
     
     return JsonResponse({'products': products_data})
+
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.db.models import Q, Sum, Count
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from decimal import Decimal
+import json
+from datetime import datetime, timedelta
+import uuid
+import logging
+import requests
+import base64
+from django.db import transaction
+from django.conf import settings
+
+from .models import (Product, Category, Sale, SaleItem, Customer, Discount, 
+                    Inventory, Payment)  # Add Payment model
+
+# Set up logging for M-Pesa debugging
+logger = logging.getLogger(__name__)
+
+# M-Pesa Service Class (copied from your ecommerce)
+class MpesaService:
+    def __init__(self):
+        self.consumer_key = getattr(settings, 'MPESA_CONSUMER_KEY', '')
+        self.consumer_secret = getattr(settings, 'MPESA_CONSUMER_SECRET', '')
+        self.business_shortcode = getattr(settings, 'MPESA_BUSINESS_SHORTCODE', '')
+        self.passkey = getattr(settings, 'MPESA_PASSKEY', '')
+        self.environment = getattr(settings, 'MPESA_ENVIRONMENT', 'sandbox')
+        
+        logger.info(f"M-Pesa Service initialized - Environment: {self.environment}, Shortcode: {self.business_shortcode}")
+        
+        if not all([self.consumer_key, self.consumer_secret, self.business_shortcode, self.passkey]):
+            logger.error("Missing M-Pesa configuration in settings")
+            raise ValueError("M-Pesa configuration is incomplete. Check your settings.")
+        
+        if self.environment == 'sandbox':
+            self.base_url = 'https://sandbox.safaricom.co.ke'
+        else:
+            self.base_url = 'https://api.safaricom.co.ke'
+    
+    def get_access_token(self):
+        """Get M-Pesa access token with enhanced error handling"""
+        logger.info("Requesting M-Pesa access token")
+        
+        try:
+            url = f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials"
+            credentials = f"{self.consumer_key}:{self.consumer_secret}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+            
+            headers = {
+                'Authorization': f'Basic {encoded_credentials}',
+                'Content-Type': 'application/json'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=30)
+            
+            if response.status_code != 200:
+                logger.error(f"Token request failed with status {response.status_code}")
+                raise Exception(f"Token request failed: HTTP {response.status_code}")
+            
+            token_data = response.json()
+            access_token = token_data.get('access_token')
+            
+            if not access_token:
+                raise Exception("No access token received from API")
+            
+            logger.info("Access token obtained successfully")
+            return access_token
+            
+        except Exception as e:
+            logger.exception(f"Error getting access token: {str(e)}")
+            raise Exception(f"Failed to get access token: {str(e)}")
+    
+    def generate_password(self):
+        """Generate M-Pesa password"""
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        password_string = f"{self.business_shortcode}{self.passkey}{timestamp}"
+        password = base64.b64encode(password_string.encode()).decode()
+        return password, timestamp
+    
+    def stk_push(self, phone_number, amount, account_reference, transaction_desc):
+        """Initiate STK Push with comprehensive error handling"""
+        logger.info(f"Starting STK Push - Phone: {phone_number}, Amount: {amount}")
+        
+        try:
+            access_token = self.get_access_token()
+            password, timestamp = self.generate_password()
+            
+            url = f"{self.base_url}/mpesa/stkpush/v1/processrequest"
+            
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            }
+            
+            amount = int(float(amount))
+            callback_url = getattr(settings, 'MPESA_CALLBACK_URL', '')
+            
+            payload = {
+                'BusinessShortCode': self.business_shortcode,
+                'Password': password,
+                'Timestamp': timestamp,
+                'TransactionType': 'CustomerPayBillOnline',
+                'Amount': amount,
+                'PartyA': phone_number,
+                'PartyB': self.business_shortcode,
+                'PhoneNumber': phone_number,
+                'CallBackURL': callback_url,
+                'AccountReference': account_reference,
+                'TransactionDesc': transaction_desc
+            }
+            
+            logger.info("Sending STK Push request...")
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            
+            if response.status_code != 200:
+                raise Exception(f"STK Push API error: HTTP {response.status_code}")
+            
+            response_data = response.json()
+            response_code = response_data.get('ResponseCode')
+            
+            if response_code != '0':
+                error_desc = response_data.get('ResponseDescription', 'Unknown error')
+                raise Exception(f"STK Push failed: {error_desc}")
+            
+            logger.info("STK Push completed successfully")
+            return response_data
+            
+        except Exception as e:
+            logger.exception(f"STK Push failed: {str(e)}")
+            raise Exception(f"STK Push failed: {str(e)}")
+
+
+@login_required
+def pos_terminal(request):
+    """Enhanced POS Terminal with M-Pesa support"""
+    categories = Category.objects.all()
+    products = Product.objects.filter(is_active=True, stock_quantity__gt=0)
+    customers = Customer.objects.all()
+    discounts = Discount.objects.filter(is_active=True)
+    
+    context = {
+        'categories': categories,
+        'products': products,
+        'customers': customers,
+        'discounts': discounts,
+    }
+    
+    return render(request, 'terminal.html', context)
+
+
+@login_required
+def process_sale(request):
+    """Enhanced process_sale with M-Pesa integration"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            
+            # Extract data
+            cart_items = data.get('items', [])
+            customer_id = data.get('customer_id')
+            payment_method = data.get('payment_method', 'cash')
+            amount_paid = Decimal(str(data.get('amount_paid', 0)))
+            discount_id = data.get('discount_id')
+            phone_number = data.get('phone_number', '')  # For M-Pesa
+            
+            if not cart_items:
+                return JsonResponse({'success': False, 'error': 'No items in cart'})
+            
+            # Validate phone number for M-Pesa
+            if payment_method == 'mpesa':
+                cleaned_phone = clean_phone_number(phone_number)
+                if not cleaned_phone:
+                    return JsonResponse({
+                        'success': False, 
+                        'error': 'Valid phone number is required for M-Pesa payment'
+                    })
+                phone_number = cleaned_phone
+            
+            with transaction.atomic():
+                # Calculate totals (same as before)
+                total_amount = Decimal('0.00')
+                sale_items = []
+                
+                for item in cart_items:
+                    product = get_object_or_404(Product, id=item['product_id'])
+                    quantity = int(item['quantity'])
+                    unit_price = product.price
+                    
+                    # Check stock
+                    if product.stock_quantity < quantity:
+                        return JsonResponse({
+                            'success': False, 
+                            'error': f'Insufficient stock for {product.name}'
+                        })
+                    
+                    item_total = unit_price * quantity
+                    total_amount += item_total
+                    
+                    sale_items.append({
+                        'product': product,
+                        'quantity': quantity,
+                        'unit_price': unit_price,
+                        'total_price': item_total,
+                    })
+                
+                # Apply discount
+                discount_amount = Decimal('0.00')
+                if discount_id:
+                    discount = get_object_or_404(Discount, id=discount_id)
+                    if discount.is_valid and total_amount >= discount.minimum_amount:
+                        discount_amount = (total_amount * discount.percentage) / 100
+                
+                # Calculate final amount
+                tax_amount = Decimal('0.00')
+                final_amount = total_amount - discount_amount + tax_amount
+                
+                # Calculate change (only for cash)
+                change_given = Decimal('0.00')
+                if payment_method == 'cash':
+                    change_given = amount_paid - final_amount if amount_paid >= final_amount else Decimal('0.00')
+                else:
+                    amount_paid = final_amount  # For non-cash payments
+                
+                # Create sale record
+                sale = Sale.objects.create(
+                    customer_id=customer_id if customer_id else None,
+                    cashier=request.user,
+                    total_amount=total_amount,
+                    discount_amount=discount_amount,
+                    tax_amount=tax_amount,
+                    final_amount=final_amount,
+                    payment_method=payment_method,
+                    amount_paid=amount_paid,
+                    change_given=change_given,
+                    status='pending' if payment_method == 'mpesa' else 'completed'
+                )
+                
+                logger.info(f"Sale created: {sale.sale_number}")
+                
+                # Create sale items and update inventory
+                for item_data in sale_items:
+                    SaleItem.objects.create(
+                        sale=sale,
+                        product=item_data['product'],
+                        quantity=item_data['quantity'],
+                        unit_price=item_data['unit_price'],
+                        total_price=item_data['total_price'],
+                    )
+                    
+                    # Update product stock (only if not M-Pesa or if M-Pesa payment succeeds)
+                    if payment_method != 'mpesa':
+                        product = item_data['product']
+                        product.stock_quantity -= item_data['quantity']
+                        product.save()
+                        
+                        # Create inventory transaction
+                        Inventory.objects.create(
+                            product=product,
+                            transaction_type='sale',
+                            quantity=-item_data['quantity'],
+                            notes=f'Sale {sale.sale_number}',
+                            user=request.user,
+                        )
+                
+                # Update customer loyalty points (only if payment completes)
+                if customer_id and payment_method != 'mpesa':
+                    customer = Customer.objects.get(id=customer_id)
+                    points_earned = int(final_amount / 10)
+                    customer.loyalty_points += points_earned
+                    customer.total_spent += final_amount
+                    customer.save()
+                
+                # Handle M-Pesa payment
+                if payment_method == 'mpesa':
+                    logger.info(f"Initiating M-Pesa payment for sale {sale.sale_number}")
+                    
+                    try:
+                        mpesa_service = MpesaService()
+                        response = mpesa_service.stk_push(
+                            phone_number=phone_number,
+                            amount=int(final_amount),
+                            account_reference=f"Sale-{sale.sale_number}",
+                            transaction_desc=f"Payment for Sale {sale.sale_number}"
+                        )
+                        
+                        if response.get('ResponseCode') == '0':
+                            checkout_request_id = response.get('CheckoutRequestID')
+                            
+                            # Create Payment record
+                            Payment.objects.create(
+                                sale=sale,  # Link to sale instead of order
+                                checkout_request_id=checkout_request_id,
+                                status="PENDING",
+                                raw_response=response,
+                                phone_number=phone_number,
+                                amount=final_amount
+                            )
+                            
+                            logger.info(f"STK Push successful. CheckoutRequestID: {checkout_request_id}")
+                            
+                            return JsonResponse({
+                                'success': True,
+                                'payment_pending': True,
+                                'message': 'STK Push sent to your phone. Please enter your M-Pesa PIN.',
+                                'checkout_request_id': checkout_request_id,
+                                'sale_id': sale.id,
+                                'sale_number': sale.sale_number,
+                                'total': float(final_amount)
+                            })
+                        else:
+                            error_msg = response.get('ResponseDescription', 'Unknown error')
+                            logger.error(f"STK Push failed: {error_msg}")
+                            sale.delete()  # Clean up failed sale
+                            
+                            return JsonResponse({
+                                'success': False,
+                                'error': f"M-Pesa payment failed: {error_msg}"
+                            })
+                            
+                    except Exception as e:
+                        logger.exception(f"M-Pesa payment initialization failed: {str(e)}")
+                        sale.delete()  # Clean up failed sale
+                        
+                        return JsonResponse({
+                            'success': False,
+                            'error': f"Payment initialization failed: {str(e)}"
+                        })
+                
+                # For non-M-Pesa payments, return success immediately
+                return JsonResponse({
+                    'success': True,
+                    'payment_pending': False,
+                    'sale_id': sale.id,
+                    'sale_number': sale.sale_number,
+                    'total': float(final_amount),
+                    'change': float(change_given),
+                })
+                
+        except Exception as e:
+            logger.exception(f"Error processing sale: {str(e)}")
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Invalid request method'})
+
+
+def clean_phone_number(phone):
+    """Clean and format phone number for M-Pesa"""
+    if not phone:
+        return None
+    
+    # Remove all non-digit characters
+    phone = ''.join(filter(str.isdigit, str(phone)))
+    
+    # Handle Kenyan phone numbers
+    if phone.startswith('0'):
+        phone = '254' + phone[1:]
+    elif phone.startswith('+254'):
+        phone = phone[1:]
+    elif phone.startswith('254'):
+        pass
+    elif len(phone) == 9:
+        phone = '254' + phone
+    
+    # Validate length
+    if len(phone) == 12 and phone.startswith('254'):
+        return phone
+    
+    return None
+
+
+@csrf_exempt
+@require_POST
+def mpesa_callback(request):
+    """Handle M-Pesa callback for POS transactions"""
+    logger.info("M-Pesa callback received for POS")
+    logger.debug(f"Callback request body: {request.body}")
+    
+    try:
+        callback_data = json.loads(request.body)
+        stk_callback = callback_data.get('Body', {}).get('stkCallback', {})
+        result_code = stk_callback.get('ResultCode')
+        checkout_request_id = stk_callback.get('CheckoutRequestID')
+        result_desc = stk_callback.get('ResultDesc')
+        
+        logger.info(f"Callback details - ResultCode: {result_code}, CheckoutRequestID: {checkout_request_id}")
+        
+        # Find Payment by checkout_request_id
+        payment = Payment.objects.filter(checkout_request_id=checkout_request_id).first()
+        if not payment:
+            logger.error(f"No Payment found for CheckoutRequestID: {checkout_request_id}")
+            return JsonResponse({'ResultCode': 0, 'ResultDesc': 'Accepted'})
+        
+        sale = payment.sale
+        
+        if result_code == 0:  # Success
+            callback_metadata = stk_callback.get('CallbackMetadata', {}).get('Item', [])
+            transaction_data = {item['Name']: item.get('Value') for item in callback_metadata}
+            
+            logger.info(f"Transaction data: {transaction_data}")
+            
+            # Update payment record
+            payment.status = "SUCCESS"
+            payment.mpesa_receipt = transaction_data.get('MpesaReceiptNumber')
+            payment.phone_number = transaction_data.get('PhoneNumber')
+            payment.transaction_date = str(transaction_data.get('TransactionDate'))
+            payment.amount = transaction_data.get('Amount')
+            payment.raw_response = callback_data
+            payment.save()
+            
+            # Update sale status and complete inventory updates
+            sale.status = "completed"
+            sale.save()
+            
+            # Now update inventory (was deferred for M-Pesa)
+            for sale_item in sale.items.all():
+                product = sale_item.product
+                product.stock_quantity -= sale_item.quantity
+                product.save()
+                
+                # Create inventory transaction
+                Inventory.objects.create(
+                    product=product,
+                    transaction_type='sale',
+                    quantity=-sale_item.quantity,
+                    notes=f'Sale {sale.sale_number} - M-Pesa Payment Confirmed',
+                    user=sale.cashier,
+                )
+            
+            # Update customer loyalty points if applicable
+            if sale.customer:
+                customer = sale.customer
+                points_earned = int(sale.final_amount / 10)
+                customer.loyalty_points += points_earned
+                customer.total_spent += sale.final_amount
+                customer.save()
+            
+            logger.info(f"Payment completed - Receipt: {payment.mpesa_receipt}")
+        
+        else:  # Failed
+            payment.status = "FAILED"
+            payment.raw_response = callback_data
+            payment.save()
+            
+            sale.status = "cancelled"
+            sale.save()
+            
+            logger.error(f"Payment failed - ResultCode: {result_code}, ResultDesc: {result_desc}")
+        
+        return JsonResponse({'ResultCode': 0, 'ResultDesc': 'Accepted'})
+    
+    except Exception as e:
+        logger.exception(f"Error processing callback: {str(e)}")
+        return JsonResponse({'ResultCode': 1, 'ResultDesc': f'Error processing callback: {str(e)}'})
+
+
+@login_required
+def check_payment_status(request):
+    """Check M-Pesa payment status via AJAX polling"""
+    checkout_request_id = request.GET.get('checkout_request_id')
+    logger.info(f"Checking payment status for CheckoutRequestID: {checkout_request_id}")
+    
+    if not checkout_request_id:
+        return JsonResponse({'error': 'Checkout request ID required'}, status=400)
+    
+    try:
+        payment = Payment.objects.filter(checkout_request_id=checkout_request_id).first()
+        
+        if payment:
+            if payment.status == "SUCCESS":
+                return JsonResponse({
+                    'status': 'SUCCESS',
+                    'message': 'Payment completed successfully!',
+                    'sale_number': payment.sale.sale_number,
+                    'mpesa_receipt': payment.mpesa_receipt
+                })
+            elif payment.status == "FAILED":
+                return JsonResponse({
+                    'status': 'FAILED',
+                    'message': 'Payment failed. Please try again.'
+                })
+            else:
+                return JsonResponse({
+                    'status': 'PENDING',
+                    'message': 'Please complete the payment on your phone...'
+                })
+        
+        # Default pending response
+        return JsonResponse({
+            'status': 'PENDING',
+            'message': 'Payment is being processed...'
+        })
+        
+    except Exception as e:
+        logger.exception(f"Error checking payment status: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def sale_detail(request, sale_id):
+    """Enhanced sale detail view with payment info"""
+    sale = get_object_or_404(Sale, id=sale_id)
+    sale_items = sale.items.select_related('product')
+    
+    # Get payment info if M-Pesa
+    payment = None
+    if sale.payment_method == 'mpesa':
+        payment = Payment.objects.filter(sale=sale).first()
+    
+    context = {
+        'sale': sale,
+        'sale_items': sale_items,
+        'payment': payment,
+    }
+    
+    return render(request, 'sale_detail.html', context)
+
+
+# Additional utility functions
+@login_required
+def get_pending_mpesa_sales(request):
+    """Get sales with pending M-Pesa payments"""
+    pending_sales = Sale.objects.filter(
+        payment_method='mpesa',
+        status='pending'
+    ).select_related('customer', 'cashier')
+    
+    sales_data = []
+    for sale in pending_sales:
+        payment = Payment.objects.filter(sale=sale).first()
+        sales_data.append({
+            'id': sale.id,
+            'sale_number': sale.sale_number,
+            'total': float(sale.final_amount),
+            'customer': sale.customer.name if sale.customer else 'Walk-in',
+            'created_at': sale.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'checkout_request_id': payment.checkout_request_id if payment else None,
+            'phone_number': payment.phone_number if payment else None
+        })
+    
+    return JsonResponse({'pending_sales': sales_data})
 
 @login_required
 def search_products(request):
@@ -188,120 +720,6 @@ def search_products(request):
     
     return JsonResponse({'products': products_data})
 
-@login_required
-def process_sale(request):
-    """Process a sale transaction"""
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            
-            # Extract data
-            cart_items = data.get('items', [])
-            customer_id = data.get('customer_id')
-            payment_method = data.get('payment_method', 'cash')
-            amount_paid = Decimal(str(data.get('amount_paid', 0)))
-            discount_id = data.get('discount_id')
-            
-            if not cart_items:
-                return JsonResponse({'success': False, 'error': 'No items in cart'})
-            
-            # Calculate totals
-            total_amount = Decimal('0.00')
-            sale_items = []
-            
-            for item in cart_items:
-                product = get_object_or_404(Product, id=item['product_id'])
-                quantity = int(item['quantity'])
-                unit_price = product.price
-                
-                # Check stock
-                if product.stock_quantity < quantity:
-                    return JsonResponse({
-                        'success': False, 
-                        'error': f'Insufficient stock for {product.name}'
-                    })
-                
-                item_total = unit_price * quantity
-                total_amount += item_total
-                
-                sale_items.append({
-                    'product': product,
-                    'quantity': quantity,
-                    'unit_price': unit_price,
-                    'total_price': item_total,
-                })
-            
-            # Apply discount
-            discount_amount = Decimal('0.00')
-            if discount_id:
-                discount = get_object_or_404(Discount, id=discount_id)
-                if discount.is_valid and total_amount >= discount.minimum_amount:
-                    discount_amount = (total_amount * discount.percentage) / 100
-            
-            # Calculate final amount
-            tax_amount = Decimal('0.00')  # Add tax calculation if needed
-            final_amount = total_amount - discount_amount + tax_amount
-            
-            # Calculate change
-            change_given = amount_paid - final_amount if amount_paid >= final_amount else Decimal('0.00')
-            
-            # Create sale
-            sale = Sale.objects.create(
-                customer_id=customer_id if customer_id else None,
-                cashier=request.user,
-                total_amount=total_amount,
-                discount_amount=discount_amount,
-                tax_amount=tax_amount,
-                final_amount=final_amount,
-                payment_method=payment_method,
-                amount_paid=amount_paid,
-                change_given=change_given,
-            )
-            
-            # Create sale items and update inventory
-            for item_data in sale_items:
-                SaleItem.objects.create(
-                    sale=sale,
-                    product=item_data['product'],
-                    quantity=item_data['quantity'],
-                    unit_price=item_data['unit_price'],
-                    total_price=item_data['total_price'],
-                )
-                
-                # Update product stock
-                product = item_data['product']
-                product.stock_quantity -= item_data['quantity']
-                product.save()
-                
-                # Create inventory transaction
-                Inventory.objects.create(
-                    product=product,
-                    transaction_type='sale',
-                    quantity=-item_data['quantity'],
-                    notes=f'Sale {sale.sale_number}',
-                    user=request.user,
-                )
-            
-            # Update customer loyalty points if applicable
-            if customer_id:
-                customer = Customer.objects.get(id=customer_id)
-                points_earned = int(final_amount / 10)  # 1 point per $10
-                customer.loyalty_points += points_earned
-                customer.total_spent += final_amount
-                customer.save()
-            
-            return JsonResponse({
-                'success': True,
-                'sale_id': sale.id,
-                'sale_number': sale.sale_number,
-                'total': float(final_amount),
-                'change': float(change_given),
-            })
-            
-        except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
-    
-    return JsonResponse({'success': False, 'error': 'Invalid request method'})
 
 @login_required
 def sales_history(request):
@@ -325,18 +743,7 @@ def sales_history(request):
     
     return render(request, 'sales_history.html', context)
 
-@login_required
-def sale_detail(request, sale_id):
-    """View sale details"""
-    sale = get_object_or_404(Sale, id=sale_id)
-    sale_items = sale.items.select_related('product')
-    
-    context = {
-        'sale': sale,
-        'sale_items': sale_items,
-    }
-    
-    return render(request, 'sale_detail.html', context)
+
 
 @login_required
 def inventory_management(request):
