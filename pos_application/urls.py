@@ -10,8 +10,8 @@ urlpatterns = [
     path('terminal/', views.pos_terminal, name='terminal'),
     path('process-sale/', views.process_sale, name='process_sale'),
 
-    # M-Pesa Integration
-    path('mpesa/callback/', views.mpesa_callback, name='mpesa_callback'),
+    # M-Pesa Integration  /mpesa-callback/
+    path('mpesa-callback/', views.mpesa_callback, name='mpesa_callback'),
     path('check-payment-status/', views.check_payment_status, name='check_payment_status'),
     path('pending-mpesa-sales/', views.get_pending_mpesa_sales, name='get_pending_mpesa_sales'),
 

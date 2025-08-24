@@ -35,7 +35,7 @@ INSTALLED_APPS = [
 CSRF_TRUSTED_ORIGINS = [
     "https://yourdomain.com",
     "https://www.yourdomain.com",
-    "https://43335c4d61ca.ngrok-free.app",   # if using ngrok for testing
+    "https://4f1cc059efd2.ngrok-free.app",   # if using ngrok for testing
 ]
 
 MIDDLEWARE = [
@@ -256,7 +256,7 @@ LOGGING = {
         },
     },
     'loggers': {
-        'pos.views': {  # Adjust this to your app name
+        'pos_application.views': {  
             'handlers': ['file', 'console'],
             'level': 'INFO',
             'propagate': True,

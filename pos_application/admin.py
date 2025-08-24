@@ -131,6 +131,55 @@ class DiscountAdmin(admin.ModelAdmin):
         )
     status.short_description = 'Status'
 
+from django.contrib import admin
+from .models import Payment
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "checkout_request_id",
+        "sale",
+        "phone_number",
+        "amount",
+        "status",
+        "mpesa_receipt",
+        "transaction_date",
+        "created_at",
+    )
+    list_filter = ("status", "created_at", "updated_at")
+    search_fields = (
+        "checkout_request_id",
+        "phone_number",
+        "mpesa_receipt",
+        "sale__id",
+    )
+    readonly_fields = ("created_at", "updated_at", "raw_response")
+
+    fieldsets = (
+        ("Payment Details", {
+            "fields": (
+                "sale",
+                "checkout_request_id",
+                "status",
+                "phone_number",
+                "amount",
+                "mpesa_receipt",
+                "transaction_date",
+            )
+        }),
+        ("M-Pesa Response", {
+            "classes": ("collapse",),
+            "fields": ("raw_response",),
+        }),
+        ("Timestamps", {
+            "fields": ("created_at", "updated_at"),
+        }),
+    )
+
+    ordering = ("-created_at",)
+
+
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):
     list_display = [
